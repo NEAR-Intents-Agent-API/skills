@@ -45,7 +45,7 @@ issue another. Never log it, never put it in an LLM prompt, URL or client bundle
 ## Use
 
 Send it as `X-Grant-Token` on swap, withdraw, transfer, shield, unshield, recover (and
-sign-message). One client per grant, so concurrent sessions never borrow each other's token:
+sign). One client per grant, so concurrent sessions never borrow each other's token:
 
 ```ts
 const agentClient = api.forGrant(token);            // TS SDK

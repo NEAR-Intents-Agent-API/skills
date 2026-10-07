@@ -2,7 +2,7 @@
 
 One complete, owner-signed rulebook per agent account. Every grant acts within it. Each
 `agent_create` and `policy_update` carries the **whole** policy, never a diff; every field below
-is required except `schedule` and `sign_message`.
+is required except `schedule` and `sign`.
 
 ```ts
 Policy = {
@@ -22,7 +22,7 @@ Policy = {
   budget: { daily_usd: string | null, weekly_usd: string | null, monthly_usd: string | null },
   timelock_ms: number,                                    // 0 … 2_592_000_000 (30 days)
   schedule?: Schedule,                                    // omit = money actions may run any time
-  sign_message?: { recipients: string[] }                 // only where the server enables NEAR message signing
+  sign?: { recipients: string[] }                         // omit = the agent signs nothing; 1–256 NEAR accounts
 }
 
 Destination =
@@ -80,8 +80,24 @@ lifts a per-asset limit; both must pass. Live usage is in `GET …/policy` →
 - Refusal: `403 policy_schedule_denied` with `meta.available_at` (next allowed moment) and
   `Retry-After`. Submit again at `available_at` with a **new** `Idempotency-Key`, or the owner
   changes `schedule`. A same-key replay returns the original operation, not a fresh judgement.
-- Exempt: deposits, `sign_message` and owner approval votes.
+- Exempt: deposits, `sign` and owner approval votes.
 - Not sent to the provider: a schedule-only edit is an off-chain owner signature.
+
+## Signing (`sign`)
+
+`sign: { recipients: ["login.example.near"] }` lets any grant ask the agent's key to sign an
+identity challenge for those NEAR accounts (`POST /v1/agents/{agent_id}/sign`), so the agent can
+prove it controls the account, for example to log in to a service. Omit it and nothing is signed.
+
+- Only the canonical `near-intents-agent-api.identity.v1` challenge is signed (exact fields
+  `domain, purpose, chain, audience, challenge, issued_at_ms, expires_at_ms`; `audience` =
+  `recipient`; lives ≤ 5 minutes). Never a transaction, an intent or free text.
+- `intents.near` and `intents.far` (the NEAR Intents contracts) are never recipients: the policy is
+  refused with `validation_failed`, a request with `403 signing_recipient_forbidden`.
+- Moves no value: `timelock_ms`, `schedule`, `budget` and `owner_approval` do not apply.
+- Off unless the owner adds it. Warn the owner before signing it: a listed service may treat the
+  signature as the account logging in, so list only trusted services.
+- Changing `sign` is an on-chain policy update (the custody provider enforces the same list).
 
 ## Ready-made policies
 
@@ -158,5 +174,4 @@ generic error.
 A malformed policy returns `400 validation_failed` with one error per field
 (`source.pointer` like `/policy/destinations/list/0/address`). Other policy-related codes:
 `policy_revision_conflict`, `policy_reconciliation_required`, `owner_approval_unsupported`,
-`near_message_signing_disabled` (a `sign_message` field while the feature is off),
 `policy_blocks_delete` (an old-shape policy must be re-signed before deletion).

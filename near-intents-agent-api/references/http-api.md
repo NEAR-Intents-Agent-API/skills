@@ -12,7 +12,7 @@ guide is `GET /llms.txt`. If this file and the server disagree, the server wins.
   | Header | When |
   |---|---|
   | `X-API-Key: naa_…` | every endpoint except `/v1/network`, `/v1/tokens` |
-  | `X-Grant-Token: ngt_…` | swap, withdraw, transfer, shield, unshield, recover, sign-message (not dry quotes, not deposit) |
+  | `X-Grant-Token: ngt_…` | swap, withdraw, transfer, shield, unshield, recover, sign (not dry quotes, not deposit) |
   | `Idempotency-Key` | required on executions and deposit (not on `dry: true`); optional on `generate-intent`. 8–128 chars `[A-Za-z0-9._:-]` |
   | `Content-Type: application/json` | every body |
 - Responses carry `x-request-id`; errors repeat it as `meta.request_id`. Log it.
@@ -88,7 +88,7 @@ Details: [owner-intents.md](owner-intents.md), signing: [signing.md](signing.md)
 | `/shield`, `/unshield` | key, grant, idem | `asset`, `amount` |
 | `/deposit` | key, idem | `origin_asset`, `destination_asset?`, `amount?`, `confidential?` |
 | `/recover` | key, grant, idem (original) | `correlation_id`, `request: { type, …original body }` |
-| `/sign-message` → 200 | key, grant | `message`, `encoding?`, `recipient` (disabled unless the server enables NEAR message signing → 501) |
+| `/sign` → 200 | key, grant | `message`, `encoding?`, `recipient` (must be in the policy's `sign.recipients`; never `intents.near`/`intents.far`) |
 
 `dry: true` on swap/withdraw → 200 `{ dry: true, type, quote }`; no grant, no idempotency key
 needed. Details: [executions.md](executions.md).

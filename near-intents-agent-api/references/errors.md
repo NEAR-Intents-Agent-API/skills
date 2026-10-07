@@ -44,7 +44,8 @@ Every error is a JSON:API document:
 | `policy_denied` | 409 | provider-side policy refused (asset, per-asset limit, hourly rate, …) → owner `policy_update` |
 | `wallet_frozen` | 409 | owner froze the account → only `agent_unfreeze` resumes |
 | `policy_not_ready` | 409 | latest policy not yet in force → wait for the policy intent to settle |
-| `signing_policy_denied` | 403 | sign-message recipient not in policy |
+| `signing_policy_denied` | 403 | recipient not in the policy's `sign.recipients` |
+| `signing_recipient_forbidden` | 403 | `intents.near`/`intents.far` are never signing recipients |
 | **Execution / routing** | | |
 | `insufficient_balance` | 409 | fund the account or lower amount |
 | `amount_too_low` | 400 | below route minimum → quote a larger amount |
@@ -88,7 +89,6 @@ Every error is a JSON:API document:
 | `operation_recovery_unavailable` | 409 | another recovery running → poll |
 | **Not found** | 404 | `agent_not_found`, `grant_not_found`, `intent_not_found`, `operation_not_found`, `status_not_found`, `approval_not_found` |
 | **Disabled** | | |
-| `near_message_signing_disabled` | 400/501 | remove `sign_message` from policy / don't call sign-message |
 | `transparency_log_disabled` | 501 | this deployment keeps no transparency log; operation proofs are unavailable |
 
 ## Retry rules

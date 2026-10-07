@@ -11,7 +11,7 @@ The API is plain HTTPS + JSON. Any language works; you need:
 ## Generate types from OpenAPI
 
 ```bash
-curl -s https://api.demo.agentsonintents.com/openapi.json -o openapi.json
+curl -s https://api.agentsonintents.com/openapi.json -o openapi.json
 # Go
 oapi-codegen -generate types,client -package agentapi openapi.json > agentapi.gen.go
 # Java / Kotlin / C# / PHP / Ruby
@@ -51,7 +51,7 @@ import (
 	"time"
 )
 
-const DefaultBaseURL = "https://api.demo.agentsonintents.com"
+const DefaultBaseURL = "https://api.agentsonintents.com"
 
 type Client struct {
 	BaseURL, APIKey, GrantToken string

@@ -2,12 +2,12 @@
 # Read-only smoke test for a NEAR Intents Agent API key. Moves no funds, changes nothing.
 #
 #   AGENT_API_KEY=naa_... ./check_api.sh
-#   AGENT_API_URL=https://api.demo.agentsonintents.com AGENT_API_KEY=naa_... ./check_api.sh
+#   AGENT_API_URL=https://api.agentsonintents.com AGENT_API_KEY=naa_... ./check_api.sh
 #
 # Needs curl; uses jq for pretty output when installed.
 set -euo pipefail
 
-API_URL="${AGENT_API_URL:-https://api.demo.agentsonintents.com}"
+API_URL="${AGENT_API_URL:-https://api.agentsonintents.com}"
 API_URL="${API_URL%/}"
 
 pretty() { if command -v jq >/dev/null 2>&1; then jq "$@"; else cat; fi; }

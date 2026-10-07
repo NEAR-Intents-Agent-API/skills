@@ -11,14 +11,12 @@ wallet signers, **server-side only** (it needs the API key).
 ## Client
 
 ```ts
-import { AgentApi, AgentApiError, createGrantCredential, createIdempotencyKey } from "@near-intents-agent-api/sdk";
+import { AgentApi, AgentApiError, AgentApiRequestError, createGrantCredential, createIdempotencyKey } from "@near-intents-agent-api/sdk";
 
 const api = new AgentApi({
   apiKey: process.env.AGENT_API_KEY!,           // naa_… from the partner dashboard
-  baseUrl: process.env.AGENT_API_URL ?? "https://api.demo.agentsonintents.com",
+  baseUrl: process.env.AGENT_API_URL,           // optional; defaults to https://api.agentsonintents.com
 });
-// Always pass baseUrl: the SDK's DEFAULT_BASE_URL (api.agentsonintents.com) is a separate
-// deployment, and a dashboard key there answers 401 invalid_api_key.
 
 await api.getNetwork();
 await api.whoami();

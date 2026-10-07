@@ -99,6 +99,14 @@ Automatic settlement stopped because something did not add up (e.g. evidence con
 3. After resolving, `GET /v1/status?correlation_id=…&refresh=true` to re-observe.
 4. Surface it to an operator; don't tell the user the payment failed or succeeded.
 
+## Operation proofs
+
+`GET /v1/agents/{agent_id}/operations/{correlation_id}/proof` (an `op_…` id) returns every
+retained audit event of one execution, each `PROVEN` with a `c2sp.org/tlog-proof@v1` against the
+notary-signed checkpoint of the API's transparency log, `PENDING` until the next checkpoint covers
+it, or `UNLOGGED`. Use it to audit an execution offline without trusting the API; it does not
+change the execution's status.
+
 ## Revocation and freezing vs in-flight work
 
 `dispatch_committed_at` is the point of no return. Before it, revoking the grant, revoking the

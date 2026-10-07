@@ -52,7 +52,7 @@ A bigger USD budget never lifts a per-asset limit and a new grant never lifts a 
 
 | Policy field | Enforced by | Changing only these needs |
 |---|---|---|
-| `destinations`, `budget`, `timelock_ms`, `schedule` | the API, before dispatch | one **off-chain** signature (`nep413`/`eip712`), no transaction |
+| `destinations`, `budget`, `timelock_ms`, `schedule` | the API, before dispatch | one **off-chain** signature (`nep413`/`eip712`/`webauthn`), no transaction |
 | `frozen`, `actions`, `confidential`, `owner_approval`, `assets`, `limits`, `max_actions_per_hour` | the custody provider, on chain | one **on-chain** signature (`nep366` for NEAR owners; EVM/passkey sign `eip712`/`webauthn` and the API sponsors the call) |
 
 The API picks which, based on what changed; you just sign whatever `intent.standard` says.

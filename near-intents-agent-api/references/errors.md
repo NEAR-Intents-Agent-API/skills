@@ -28,7 +28,7 @@ Every error is a JSON:API document:
 | Code | HTTP | What to do |
 |---|---|---|
 | **Auth & request** | | |
-| `invalid_api_key` | 401 | wrong/revoked key, or wrong base URL (dashboard keys work on `api.demo.agentsonintents.com`); fix config, don't retry |
+| `invalid_api_key` | 401 | wrong or revoked key, stray whitespace, or a base URL from a different deployment; fix config, don't retry |
 | `validation_failed` | 400 | fix the fields in `source.pointer` |
 | `invalid_json`, `invalid_cursor` | 400 | fix the request |
 | `idempotency_key_required` | 400 | add `Idempotency-Key` |
@@ -89,6 +89,7 @@ Every error is a JSON:API document:
 | **Not found** | 404 | `agent_not_found`, `grant_not_found`, `intent_not_found`, `operation_not_found`, `status_not_found`, `approval_not_found` |
 | **Disabled** | | |
 | `near_message_signing_disabled` | 400/501 | remove `sign_message` from policy / don't call sign-message |
+| `transparency_log_disabled` | 501 | this deployment keeps no transparency log; operation proofs are unavailable |
 
 ## Retry rules
 

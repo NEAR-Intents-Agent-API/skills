@@ -23,7 +23,7 @@ use reqwest::Method;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-pub const DEFAULT_BASE_URL: &str = "https://api.demo.agentsonintents.com";
+pub const DEFAULT_BASE_URL: &str = "https://api.agentsonintents.com";
 const NEP413_TAG: u32 = (1 << 31) + 413;
 const NEP366_TAG: u32 = (1 << 30) + 366;
 

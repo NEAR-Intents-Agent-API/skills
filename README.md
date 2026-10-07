@@ -1,7 +1,7 @@
 # NEAR Intents Agent API — Agent Skills
 
 Skills that teach coding agents (Claude Code, Claude.ai, Codex, Cursor, …) how to build on the
-[NEAR Intents Agent API](https://api.demo.agentsonintents.com/llms.txt): give every AI agent its own
+[NEAR Intents Agent API](https://api.agentsonintents.com/llms.txt): give every AI agent its own
 custody account on NEAR Intents, let the end user sign the rules once with their own wallet, and
 let the agent swap, transfer, withdraw and receive funds inside those rules — from TypeScript,
 Python, Rust, Go or any language that speaks HTTP.
@@ -19,15 +19,14 @@ Python, Rust, Go or any language that speaks HTTP.
 ```
 
 - **Policy = what** may happen: actions, assets, per-asset limits, allowed destinations, USD
-  budget, timelock, owner approval, freeze.
+  budget, timelock, weekly schedule, owner approval, freeze.
 - **Grant = who** may act: one revocable token per session, assistant or bot.
 - Your backend never holds the owner's key; the browser never sees your API key; the model never
   sees either.
 
 ## Start in five minutes
 
-1. **Get a key.** Sign up at the partner dashboard
-   (`https://partners-production-069b.up.railway.app`), open **API keys**, create one. The
+1. **Get a key.** Create a partner API key in the [partner dashboard](https://partners.near-intents.org/) (**API keys**). The
    `naa_…` token is shown once; store it as `AGENT_API_KEY` in your backend's secrets.
 2. **Check it.**
    ```bash
@@ -37,7 +36,7 @@ Python, Rust, Go or any language that speaks HTTP.
    *"Add NEAR Intents agent wallets to our FastAPI backend: onboarding with the user's NEAR
    wallet, one grant per chat session, and a swap tool for the assistant."*
 
-The hosted API (`https://api.demo.agentsonintents.com`) is mainnet with real funds. Build with small
+The hosted API (`https://api.agentsonintents.com`) is mainnet with real funds. Build with small
 amounts and dedicated owner accounts.
 
 ## Install
@@ -106,9 +105,9 @@ The demo app built on the same API runs at <https://demo.agentsonintents.com>.
 ## Related repositories
 
 - TypeScript SDK: [`@near-intents-agent-api/sdk`](https://www.npmjs.com/package/@near-intents-agent-api/sdk)
-  (pass `baseUrl: "https://api.demo.agentsonintents.com"`; its built-in default is another deployment)
+  (its default `baseUrl` is `https://api.agentsonintents.com`)
 - Runnable examples: <https://github.com/NEAR-Intents-Agent-API/examples>
-- Live contract: `https://api.demo.agentsonintents.com/openapi.json`, guide: `/llms.txt`
+- Live contract: `https://api.agentsonintents.com/openapi.json`, guide: `/llms.txt`
 
 ## Verifying the bundled code
 

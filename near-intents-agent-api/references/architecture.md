@@ -4,7 +4,7 @@
 
 ```
 ┌──────────── browser / app ────────────┐        ┌──────────── your backend ────────────┐        ┌── NEAR Intents Agent API ──┐
-│ owner wallet (NEAR/EVM/passkey)       │        │ naa_ key (secret store)              │        │ api.demo.agentsonintents.com   │
+│ owner wallet (NEAR/EVM/passkey)       │        │ naa_ key (secret store)              │        │ api.agentsonintents.com   │
 │ shows preview, signs intent.payload   │◄──────►│ BFF routes: generate / submit / read │◄──────►│ policy, grants, dispatch  │
 │ never sees naa_ / ngt_                │        │ grant tokens (encrypted)             │        │ → OutLayer custody, 1Click│
 └───────────────────────────────────────┘        │ AI agent runtime / tools             │        └───────────────────────────┘

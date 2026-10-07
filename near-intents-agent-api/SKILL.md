@@ -1,6 +1,6 @@
 ---
 name: near-intents-agent-api
-description: Build on the NEAR Intents Agent API (api.demo.agentsonintents.com) in any language — TypeScript, Python, Rust, Go or plain HTTP. Use when integrating AI-agent custody wallets on NEAR Intents into an app or backend, when code mentions `naa_` API keys, `ngt_` grant tokens, `X-Grant-Token`, `generate-intent`/`submit-intent`, `@near-intents-agent-api/sdk`, owner-signed spending policies, agent swaps/transfers/withdrawals/deposits, or when someone wants an AI agent to hold and move funds under owner-set limits.
+description: Build on the NEAR Intents Agent API (api.agentsonintents.com) in any language — TypeScript, Python, Rust, Go or plain HTTP. Use when integrating AI-agent custody wallets on NEAR Intents into an app or backend, when code mentions `naa_` API keys, `ngt_` grant tokens, `X-Grant-Token`, `generate-intent`/`submit-intent`, `@near-intents-agent-api/sdk`, owner-signed spending policies, agent swaps/transfers/withdrawals/deposits, or when someone wants an AI agent to hold and move funds under owner-set limits.
 ---
 
 # NEAR Intents Agent API
@@ -12,14 +12,12 @@ partner API key and never touches anyone's private keys.
 
 | Party | Credential | Does |
 |---|---|---|
-| **Partner** (your backend) | API key `naa_…` from the partner dashboard | Calls every endpoint, prepares owner actions, stores grants |
+| **Partner** (your backend) | API key `naa_…` from the [partner dashboard](https://partners.near-intents.org/) | Calls every endpoint, prepares owner actions, stores grants |
 | **Owner** (end user) | Their wallet: NEAR account, EVM key or passkey | Signs: create account, policy, grants, freeze, approve, delete |
 | **Agent** (assistant, bot, session) | Grant token `ngt_…` (held by your backend) | Moves money inside the owner's policy |
 
-Hosted API: `https://api.demo.agentsonintents.com` (mainnet, real funds) — the deployment that
-partner-dashboard keys belong to. Machine-readable contract: `/openapi.json`; compact LLM guide:
-`/llms.txt`. Always pass this base URL explicitly: the TypeScript SDK's built-in default
-(`api.agentsonintents.com`) is a separate deployment that does not accept dashboard keys.
+Hosted API: `https://api.agentsonintents.com` (mainnet, real funds), also the TypeScript SDK's
+default `baseUrl`. Machine-readable contract: `/openapi.json`; compact LLM guide: `/llms.txt`.
 
 ## Non-negotiable rules
 
@@ -53,13 +51,13 @@ Follow these in every integration; most bugs and lost-fund incidents come from b
 
 ## Quick start (5 minutes, any language)
 
-1. Sign up at the **partner dashboard** (email + password), open **API keys**, create a key. The
-   `naa_…` token is shown once — put it in your backend's secret store as `AGENT_API_KEY`.
+1. Create a partner API key in the **[partner dashboard](https://partners.near-intents.org/)** (**API keys**). The `naa_…` token is
+   shown once — put it in your backend's secret store as `AGENT_API_KEY`.
 2. Smoke-test:
    ```bash
-   curl -s https://api.demo.agentsonintents.com/v1/network            # public: service health
-   curl -s https://api.demo.agentsonintents.com/v1/whoami -H "X-API-Key: $AGENT_API_KEY"
-   curl -s https://api.demo.agentsonintents.com/v1/quotas -H "X-API-Key: $AGENT_API_KEY"
+   curl -s https://api.agentsonintents.com/v1/network            # public: service health
+   curl -s https://api.agentsonintents.com/v1/whoami -H "X-API-Key: $AGENT_API_KEY"
+   curl -s https://api.agentsonintents.com/v1/quotas -H "X-API-Key: $AGENT_API_KEY"
    ```
    Or run [scripts/check_api.sh](scripts/check_api.sh).
 3. Follow the lifecycle below. Full walkthrough: [references/getting-started.md](references/getting-started.md).
@@ -78,7 +76,8 @@ owner signs ──► agent_create (policy) ──► grant_issue (token commitm
    `credential` in `grant_issue` with `label` and `expires_at` (≤365 days); owner signs; you store
    the token encrypted.
 3. **Fund** — `POST /v1/agents/{agent_id}/deposit {origin_asset}` (API key + Idempotency-Key, no
-   grant) returns `details.deposit_address`, `min_amount`, `expires_at`, optional `memo`.
+   grant; `amount` optional) returns `details.deposit_address`, `min_amount`, `expires_at`,
+   optional `memo`, and `refund_to` (the agent's own balance).
 4. **Act** — `POST /v1/agents/{agent_id}/swap|transfer|withdraw|shield|unshield` with
    `X-API-Key`, `X-Grant-Token`, `Idempotency-Key`. Quote first with `dry: true` (swap/withdraw).
 5. **Observe** — `GET /v1/status?correlation_id=…&wait_ms=30000` until it stops moving.
@@ -106,18 +105,18 @@ The Python and Rust signers are verified byte-for-byte against near-api-js and v
 | Every endpoint, header, shape, pagination | [references/http-api.md](references/http-api.md) |
 | Run owner actions, previews, expiry, cooldowns, BFF split | [references/owner-intents.md](references/owner-intents.md) |
 | Sign `nep413` / `nep366` / `eip712` / `webauthn` correctly | [references/signing.md](references/signing.md) |
-| Write or edit a policy (limits, destinations, USD budget, timelock, approval) | [references/policy.md](references/policy.md) |
+| Write or edit a policy (limits, destinations, USD budget, timelock, schedule, approval) | [references/policy.md](references/policy.md) |
 | Issue, use, store, revoke grants | [references/grants.md](references/grants.md) |
 | Swap, transfer, withdraw, deposit, shield, quotes, chains | [references/executions.md](references/executions.md) |
-| Statuses, polling, idempotency, `UNCERTAIN`, `/recover` | [references/status-and-recovery.md](references/status-and-recovery.md) |
+| Statuses, polling, idempotency, `UNCERTAIN`, `/recover`, operation proofs | [references/status-and-recovery.md](references/status-and-recovery.md) |
 | Handle an error code | [references/errors.md](references/errors.md) |
 | Design the integration (data model, AI tools, custody models, security) | [references/architecture.md](references/architecture.md) |
 | Find a runnable example for a flow | [references/examples.md](references/examples.md) |
 
 ## When writing code for a user
 
-- Set `baseUrl` to `https://api.demo.agentsonintents.com` explicitly (never rely on the SDK
-  default); read `AGENT_API_URL`/`AGENT_API_KEY` from env. Self-hosted/local deployments only change the base URL.
+- Read `AGENT_API_URL`/`AGENT_API_KEY` from env; the base URL is `https://api.agentsonintents.com`
+  unless the user runs a self-hosted or local deployment (then only the base URL changes).
 - Show `preview.summary` (and `preview.policy` / `preview.deletion`) to the owner before signing.
 - Read `GET /v1/network` before acting and after `quote_unavailable`, `route_unavailable` or
   `provider_unavailable`; if a component is `down`, wait rather than change the request.

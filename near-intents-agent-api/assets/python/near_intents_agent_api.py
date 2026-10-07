@@ -31,7 +31,7 @@ from typing import Any, Iterable
 
 import httpx
 
-DEFAULT_BASE_URL = "https://api.demo.agentsonintents.com"
+DEFAULT_BASE_URL = "https://api.agentsonintents.com"
 API_KEY_PATTERN = re.compile(r"^naa_[A-Za-z0-9_-]{43}$")
 GRANT_TOKEN_PATTERN = re.compile(r"^ngt_[A-Za-z0-9_-]{43}$")
 SETTLEMENT_PATHS = ("/swap", "/withdraw", "/transfer", "/shield", "/unshield")

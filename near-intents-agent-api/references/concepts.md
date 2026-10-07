@@ -42,6 +42,7 @@ layer can lift it:
 | `policy_action_denied` | policy `actions` / `confidential` | owner `policy_update` |
 | `policy_destination_denied` | policy `destinations` | owner `policy_update` |
 | `spend_budget_exceeded` | policy `budget` (USD, shared) | owner raises cap, or wait for the window |
+| `policy_schedule_denied` | policy `schedule` (owner's weekly hours) | submit again at `meta.available_at`, or owner changes `schedule` |
 | `policy_denied` | provider-enforced policy (assets, per-asset limits, rate, …) | owner `policy_update` |
 | `policy_not_ready` | latest policy not yet in force | wait for the pending policy intent |
 
@@ -51,7 +52,7 @@ A bigger USD budget never lifts a per-asset limit and a new grant never lifts a 
 
 | Policy field | Enforced by | Changing only these needs |
 |---|---|---|
-| `destinations`, `budget`, `timelock_ms` | the API, before dispatch | one **off-chain** signature (`nep413`/`eip712`), no transaction |
+| `destinations`, `budget`, `timelock_ms`, `schedule` | the API, before dispatch | one **off-chain** signature (`nep413`/`eip712`), no transaction |
 | `frozen`, `actions`, `confidential`, `owner_approval`, `assets`, `limits`, `max_actions_per_hour` | the custody provider, on chain | one **on-chain** signature (`nep366` for NEAR owners; EVM/passkey sign `eip712`/`webauthn` and the API sponsors the call) |
 
 The API picks which, based on what changed; you just sign whatever `intent.standard` says.
@@ -71,11 +72,14 @@ Both return a `correlation_id`; `GET /v1/status?correlation_id=` reads either.
 
 ## Execution pipeline
 
-1. **Authorize** — grant live, not frozen, action/asset/limits/destination/budget allowed.
+1. **Authorize** — grant live, not frozen, action/asset/limits/destination/budget allowed, and
+   the `schedule` open at the moment it would run (now + `timelock_ms`).
    Refusal = error response, nothing recorded.
 2. **Wait** — `timelock_ms > 0` → `QUEUED` until `execute_after` (owner may `execution_cancel`).
-   `owner_approval` → `PENDING_APPROVAL` until the owner's `approval_vote`.
-3. **Dispatch commit** — `dispatch_committed_at` is set and the request goes to the provider.
+   `owner_approval` → `PENDING_APPROVAL` until the owner's `approval_vote`. A release outside
+   the `schedule` fails the operation; nothing is sent.
+3. **Dispatch commit** — the `schedule` is checked once more, then `dispatch_committed_at` is
+   set and the request goes to the provider.
    From here, revoking the grant/key or freezing does **not** stop this operation.
 4. **Settle** — `PROCESSING` → `SUCCESS` | `REFUNDED` | `FAILED`, or `UNCERTAIN` /
    `NEEDS_REVIEW` when the outcome cannot be proven.

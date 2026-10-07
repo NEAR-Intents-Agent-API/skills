@@ -62,7 +62,7 @@ grant of that conversation.
 | Tool | API | Notes |
 |---|---|---|
 | `get_balances` | `GET …/balances` (public + confidential) | format with `decimals` |
-| `get_rules` | `GET …/policy` | summarize actions, destinations, budget remaining, timelock |
+| `get_rules` | `GET …/policy` | summarize actions, destinations, budget remaining, timelock, schedule |
 | `list_tokens` | `GET /v1/tokens` | cache; resolve symbols → `asset_id` |
 | `quote_swap` / `quote_withdraw` | `dry: true` | always before executing |
 | `swap` / `transfer` / `withdraw` | executions | server creates the idempotency key; require explicit user confirmation for amounts above a threshold |

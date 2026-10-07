@@ -87,7 +87,39 @@ Also: `withdraw`, `transfer`, `shield`, `unshield`, `recover(agentId, { correlat
 `listAgents({ external_user_id, cursor })`, `getAgent`, `getWallet`, `getBalances(id, { source, asset })`,
 `getPolicy`, `getPolicyHistory`, `listGrants`, `listScheduledExecutions`, `getContainment`,
 `listApprovals`, `getApproval`, `getAddress(id, "near")`, `listProviderRecords(id, kind)`,
-`getHistory(id, { cursor, limit })`, `getStatus(cid, { waitMs, refresh })`.
+`getHistory(id, { cursor, limit })`, `getStatus(cid, { waitMs, refresh })`,
+`getOperationProof(id, cid)`.
+
+## Identity signing
+
+With a grant, and only for recipients in the policy's `sign.recipients` (never `intents.near` or
+`intents.far`), the API signs a canonical identity challenge with the agent's NEAR key (NEP-413):
+
+```ts
+const signature = await agent.sign(agentId, { message: canonicalChallengeJson, recipient: "login.example.near" });
+// signature: { near_account_id, public_key, signature (hex), nonce (base64), recipient }
+```
+
+The challenge format is in [policy.md](policy.md#signing-sign). The relying party verifies the
+NEP-413 signature over `message`, `nonce` and `recipient`, and that `public_key` is a full-access
+key of `near_account_id`; the examples' `support/identity.ts` does both.
+
+## Operation proofs
+
+```ts
+import { NoteError, ProofError, verifyOperationProof } from "@near-intents-agent-api/sdk";
+
+const proof = await api.getOperationProof(agentId, "op_…");          // executions only
+const verified = verifyOperationProof(proof, "api.agentsonintents.com/log"); // pin the origin yourself
+// verified.proven: [{ index, fields, checkpoint, cosignedAt }]; verified.pending, verified.unlogged
+```
+
+Offline and without trusting the API: each `PROVEN` event hashes to a leaf of a checkpoint signed by
+the log key and cosigned by the notary, and names this execution. A proof that does not hold throws
+`NoteError` or `ProofError`. `PENDING` events wait for the next checkpoint. To tie the keys to
+attested code, check the notary's TDX birth quote (`proof.notary.birth`) and compare its
+`report_data` with `verified.birthReportData`. A deployment without a log answers
+`501 transparency_log_disabled`.
 
 ## Errors
 

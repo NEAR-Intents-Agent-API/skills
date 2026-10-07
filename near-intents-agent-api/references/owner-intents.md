@@ -76,7 +76,7 @@ to a minute; off-chain ones settle almost immediately.
 
 | Owner | Change enforced by provider (on chain) | Change enforced by API (off chain) |
 |---|---|---|
-| NEAR | `nep366` delegate action (sponsor pays gas): `agent_create`, provider policy edits, freeze/unfreeze | `nep413`: destinations/budget/timelock-only edits, grants, cancel, archive, votes, … |
+| NEAR | `nep366` delegate action (sponsor pays gas): `agent_create`, provider policy edits, freeze/unfreeze | `nep413`: destinations/budget/timelock/schedule-only edits, grants, cancel, archive, votes, … |
 | EVM | `eip712` | `eip712` |
 | Passkey | `webauthn` | `webauthn` |
 

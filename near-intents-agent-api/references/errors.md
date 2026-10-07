@@ -39,6 +39,7 @@ Every error is a JSON:API document:
 | `agent_grant_required` | 403 | missing/revoked/expired/foreign grant → issue a grant or use the right token |
 | `policy_action_denied` | 403 | action (or confidential form) not in policy → owner `policy_update` |
 | `policy_destination_denied` | 403 | address not allowed → owner adds it to `destinations` |
+| `policy_schedule_denied` | 403 | outside the owner's `schedule` when it would run (after the timelock) → submit again at `meta.available_at` with a **new** key, or owner changes `schedule` |
 | `spend_budget_exceeded` | 403 | shared USD budget used up → wait for window (`usage.budget.*.resets_at`) or owner raises cap; retry with a **new** key |
 | `policy_denied` | 409 | provider-side policy refused (asset, per-asset limit, hourly rate, …) → owner `policy_update` |
 | `wallet_frozen` | 409 | owner froze the account → only `agent_unfreeze` resumes |
@@ -97,7 +98,7 @@ Every error is a JSON:API document:
 2. **Refusal codes (403, most 409)**: the request is wrong for the current state. Retrying the
    same thing won't help; change state (policy, grant, balance) or the request.
 3. **"Nothing was submitted" codes** (`route_unavailable`, `quote_unavailable`,
-   `spend_budget_exceeded`, `spend_price_unavailable`, `wallet_busy`): the API rolled back; a
+   `spend_budget_exceeded`, `policy_schedule_denied`, `spend_price_unavailable`, `wallet_busy`): the API rolled back; a
    later attempt is a new request → **new** idempotency key.
 4. **Throttles** (429): wait until `available_at` / `Retry-After`.
 5. **Status-level outcomes** (`FAILED`, `REFUNDED`, `UNCERTAIN`, `NEEDS_REVIEW`) are not HTTP

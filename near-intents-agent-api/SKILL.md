@@ -44,7 +44,7 @@ Follow these in every integration; most bugs and lost-fund incidents come from b
 8. **A policy is in force only when `status: "APPLIED"` and `provider_policy_synced: true`.**
    Before that, executions fail with `policy_not_ready`.
 9. **Branch on `errors[0].code`**, never on `title`/`detail`. Refusal codes name the layer that
-   refused (grant, policy action, destination, provider policy, USD budget); only changing that
+   refused (grant, policy action, destination, provider policy, USD budget, schedule); only changing that
    layer lifts it.
 10. **Funds go only to `details.deposit_address`.** A `correlation_id` (`op_…`/`intent_…`) is a
     tracking id, never an address.

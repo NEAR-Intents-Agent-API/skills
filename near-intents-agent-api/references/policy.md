@@ -2,7 +2,7 @@
 
 One complete, owner-signed rulebook per agent account. Every grant acts within it. Each
 `agent_create` and `policy_update` carries the **whole** policy, never a diff; every field below
-is required except `sign_message`.
+is required except `schedule` and `sign_message`.
 
 ```ts
 Policy = {
@@ -21,12 +21,23 @@ Policy = {
   destinations: { mode: "only" | "except" | "any", list: Destination[] },   // list ≤256; "any" ⇒ []
   budget: { daily_usd: string | null, weekly_usd: string | null, monthly_usd: string | null },
   timelock_ms: number,                                    // 0 … 2_592_000_000 (30 days)
+  schedule?: Schedule,                                    // omit = money actions may run any time
   sign_message?: { recipients: string[] }                 // only where the server enables NEAR message signing
 }
 
 Destination =
   | { action: "withdraw", chain: string, address: string, memo: string | null }   // external chain address
   | { action: "transfer", address: string, confidential: boolean }                // NEAR Intents account
+
+Schedule = {
+  mode: "only" | "except",                                // run only inside the windows, or pause inside them
+  time_zone: string,                                      // IANA zone, e.g. "Europe/Berlin", "UTC"
+  windows: {                                              // 1 … 28
+    days: ("mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun")[],   // unique, 1 … 7
+    start: string,                                        // "HH:MM", 24-hour, inclusive
+    end: string,                                          // "HH:MM" or "24:00", exclusive, ≠ start
+  }[]
+}
 ```
 
 Unknown fields are rejected (strict objects). Field names are snake_case.
@@ -45,6 +56,7 @@ Unknown fields are rejected (strict objects). Field names are snake_case.
 | `destinations` | where withdrawals/transfers may go | **API** |
 | `budget` | total USD value across all assets, rolling 24 h / 7 d / 30 d; shared by every grant | **API** |
 | `timelock_ms` | every outgoing money action is `QUEUED` this long; owner can `execution_cancel` | **API** |
+| `schedule` | weekly windows on the owner's clock when money actions may run (`only`) or are paused (`except`) | **API** |
 
 `budget` notes: charged atomically at dispatch using 1Click USD prices; an asset with no fresh
 price fails with `spend_price_unavailable` (only while a budget is set). A larger budget never
@@ -56,6 +68,20 @@ lifts a per-asset limit; both must pass. Live usage is in `GET …/policy` →
 - `only` matches the **exact** entry, memo included. `except` blocks an account under any memo.
 - EVM addresses must be canonical lowercase hex; other chains keep their exact case.
 - `transfer` entries are NEAR Intents account ids (`alice.near`, implicit hex accounts).
+
+`schedule` notes:
+- A window is `start` inclusive, `end` exclusive, in `time_zone`. `00:00`–`24:00` is a whole day.
+- An `end` earlier than `start` runs past midnight and belongs to the day it starts on:
+  `{"days":["fri"],"start":"22:00","end":"02:00"}` covers Friday night into Saturday morning.
+- Daylight saving follows the time zone: a window means the same local hours all year.
+- Judged when the action would **run**: at submit for `now + timelock_ms`, again when the timelock
+  releases, and again at dispatch. A timelocked action whose release falls outside the schedule
+  fails; nothing is sent.
+- Refusal: `403 policy_schedule_denied` with `meta.available_at` (next allowed moment) and
+  `Retry-After`. Submit again at `available_at` with a **new** `Idempotency-Key`, or the owner
+  changes `schedule`. A same-key replay returns the original operation, not a fresh judgement.
+- Exempt: deposits, `sign_message` and owner approval votes.
+- Not sent to the provider: a schedule-only edit is an off-chain owner signature.
 
 ## Ready-made policies
 
@@ -90,6 +116,17 @@ lifts a per-asset limit; both must pass. Live usage is in `GET …/policy` →
 }
 ```
 
+**Business hours only** (any policy plus a schedule; here Mon–Fri 09:00–17:00 Berlin time):
+
+```json
+"schedule": {
+  "mode": "only", "time_zone": "Europe/Berlin",
+  "windows": [{ "days": ["mon","tue","wed","thu","fri"], "start": "09:00", "end": "17:00" }]
+}
+```
+
+Pause overnight instead: `{"mode":"except","time_zone":"UTC","windows":[{"days":["mon","tue","wed","thu","fri","sat","sun"],"start":"22:00","end":"07:00"}]}`.
+
 **Human-in-the-loop** (NEAR owner only): as above with `"owner_approval": true`.
 
 **Broad, capped by USD**: `"actions": ["swap","transfer","withdraw"]`, `"assets": "any"`,
@@ -100,7 +137,7 @@ explicitly accept that the agent can send anywhere.
 
 1. `view = GET /v1/agents/{id}/policy`. Require `status == "APPLIED"`.
 2. Check `GET /v1/agents/{id}` → `cooldowns.policy_change_available_at` is null or past.
-3. Build the complete new policy from `view.policy`.
+3. Build the complete new policy from `view.policy` (to remove a schedule, omit `schedule`).
 4. `generate-intent {type: "policy_update", agent_id, policy, expected_revision: view.revision}`.
 5. Owner signs (`nep413`/`eip712` when only API-enforced fields changed, otherwise on chain).
 6. Submit, wait `SUCCESS`, then poll `GET …/policy` until `APPLIED` and

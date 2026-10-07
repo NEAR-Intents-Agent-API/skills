@@ -1,0 +1,19 @@
+{
+  "name": "near-intents-agent-api",
+  "owner": {
+    "name": "NEAR Intents Agent API"
+  },
+  "metadata": {
+    "description": "Agent skills for building on the NEAR Intents Agent API: owner-signed custody accounts for AI agents on NEAR Intents.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "near-intents-agent-api",
+      "description": "Integrate the NEAR Intents Agent API from any language: partner keys, owner intents and signing, policies, grants, swaps/transfers/withdrawals/deposits, status and recovery.",
+      "source": "./",
+      "strict": false,
+      "skills": ["./near-intents-agent-api"]
+    }
+  ]
+}

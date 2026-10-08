@@ -52,7 +52,7 @@ dedicated low-value owner account.
 | `10:timelocked-payout` | `10-recipes/02-timelocked-payout.ts` | timelock, scheduled list, cancel |
 | `10:ai-assistant` | `10-recipes/03-ai-assistant.ts` | grant per assistant, tool → API mapping |
 | `10:full-journey` | `10-recipes/04-full-journey.ts` | create → grant → fund → quote → swap |
-| `11:verify-operation` | `11-verify-operations/01-verify-operation.ts` | operation proof, `verifyOperationProof` offline |
+| `11:verify-operation` | `11-verify-operations/01-verify-operation.ts` | operation proof and its evidence, `verifyOperationProof` offline |
 
 Useful support modules to copy: `support/sign-near-intent.ts` (server-side NEAR signer:
 NEP-413 + NEP-366), `support/evm-owner.ts` (EVM owner descriptor + EIP-712),

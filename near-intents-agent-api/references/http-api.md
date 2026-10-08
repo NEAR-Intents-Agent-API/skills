@@ -58,7 +58,7 @@ Details: [owner-intents.md](owner-intents.md), signing: [signing.md](signing.md)
 |---|---|---|---|
 | `GET /v1/status` | key | `correlation_id`, `wait_ms` (0–30000), `refresh` (bool) | `StatusResponse` |
 | `GET /v1/agents/{agent_id}/history` | key | `cursor`, `limit` (1–100, default 25) | page of `StatusResponse` |
-| `GET /v1/agents/{agent_id}/operations/{correlation_id}/proof` | key | path `correlation_id` is an `op_…` id | `{ correlation_id, origin, notary, events }`: each audit event of the execution with a `c2sp.org/tlog-proof@v1` (`PROVEN`), `PENDING` until the next checkpoint, or `UNLOGGED`; `notary` holds the verifier keys and TDX birth attestation. A deployment without a transparency log answers 501 `transparency_log_disabled` |
+| `GET /v1/agents/{agent_id}/operations/{correlation_id}/proof` | key | path `correlation_id` is an `op_…` id | `{ correlation_id, origin, notary, events }`: each audit event of the execution with a `c2sp.org/tlog-proof@v1` (`PROVEN`) and its `evidence` (the recorded result, hashed into the opening), `PENDING` until the next checkpoint, or `UNLOGGED`; `notary` holds the verifier keys and TDX birth attestation. A deployment without a transparency log answers 501 `transparency_log_disabled` |
 
 ### Agents and reads
 

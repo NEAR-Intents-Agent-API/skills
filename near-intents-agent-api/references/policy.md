@@ -97,7 +97,7 @@ prove it controls the account, for example to log in to a service. Omit it and n
 - Moves no value: `timelock_ms`, `schedule`, `budget` and `owner_approval` do not apply.
 - Off unless the owner adds it. Warn the owner before signing it: a listed service may treat the
   signature as the account logging in, so list only trusted services.
-- Changing `sign` is an on-chain policy update (the custody provider enforces the same list).
+- Changing `sign` is an on-chain policy update (the wallet provider enforces the same list).
 
 ## Ready-made policies
 

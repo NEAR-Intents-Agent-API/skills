@@ -5,7 +5,7 @@ method named by `intent.standard`. You submit `signed_data = { ...intent, <walle
 
 In a product, **the owner's wallet in the browser signs** and your backend only forwards bytes.
 Server-side signers (below) exist for scripts, tests, CI, and integrations where the company
-deliberately operates the owner key (see [architecture.md](architecture.md#custody-models)).
+deliberately operates the owner key (see [architecture.md](architecture.md#key-ownership-models)).
 
 Never: rebuild the payload, re-serialize it with different key order, hash it yourself before a
 wallet that hashes again, sign with a function-call key, or guess the standard from the type.

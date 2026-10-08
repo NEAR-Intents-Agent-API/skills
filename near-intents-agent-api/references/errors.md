@@ -60,7 +60,7 @@ Every error is a JSON:API document:
 | `spend_price_unavailable` | 503 | no fresh USD price for budget accounting → retry later, new key |
 | `authorization_stale` | 409 | grant/key revoked or policy/owner changed between admission and dispatch → re-evaluate |
 | `deposit_quota_exceeded` | 429 | 500 deposit addresses / 24 h → wait `available_at` |
-| **Provider (custody/1Click) state** | | |
+| **Provider (wallet service/1Click) state** | | |
 | `provider_unavailable` | 503 | provider down/breaker open → wait; read `/v1/network` |
 | `provider_rate_limited` | 429 | reads: wait `Retry-After`, same request; executions: recorded refusal → new key after a short wait |
 | `provider_refused` | 409 | provider refused for its own reason → inspect `detail`, don't blind-retry |

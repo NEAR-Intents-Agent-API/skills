@@ -1,11 +1,11 @@
 ---
 name: near-intents-agent-api
-description: Build on the NEAR Intents Agent API (api.agentsonintents.com) in any language — TypeScript, Python, Rust, Go or plain HTTP. Use when integrating AI-agent custody wallets on NEAR Intents into an app or backend, when code mentions `naa_` API keys, `ngt_` grant tokens, `X-Grant-Token`, `generate-intent`/`submit-intent`, `@near-intents-agent-api/sdk`, owner-signed spending policies, agent swaps/transfers/withdrawals/deposits, or when someone wants an AI agent to hold and move funds under owner-set limits.
+description: Build on the NEAR Intents Agent API (api.agentsonintents.com) in any language — TypeScript, Python, Rust, Go or plain HTTP. Use when integrating AI-agent wallets on NEAR Intents into an app or backend, when code mentions `naa_` API keys, `ngt_` grant tokens, `X-Grant-Token`, `generate-intent`/`submit-intent`, `@near-intents-agent-api/sdk`, owner-signed spending policies, agent swaps/transfers/withdrawals/deposits, or when someone wants an AI agent to hold and move funds under owner-set limits.
 ---
 
 # NEAR Intents Agent API
 
-A backend HTTP API that gives each AI agent its own **custody account on NEAR Intents**. The end
+A backend HTTP API that gives each AI agent its own **agent account on NEAR Intents**. The end
 user (the **owner**) signs the rules once with their own wallet; the agent then swaps, transfers
 and withdraws on its own, inside those rules, with no further signatures. Your backend holds one
 partner API key and never touches anyone's private keys.
@@ -115,7 +115,7 @@ The Python and Rust signers are verified byte-for-byte against near-api-js and v
 | Swap, transfer, withdraw, deposit, shield, quotes, chains | [references/executions.md](references/executions.md) |
 | Statuses, polling, idempotency, `UNCERTAIN`, `/recover`, operation proofs | [references/status-and-recovery.md](references/status-and-recovery.md) |
 | Handle an error code | [references/errors.md](references/errors.md) |
-| Design the integration (data model, AI tools, custody models, security) | [references/architecture.md](references/architecture.md) |
+| Design the integration (data model, AI tools, key ownership models, security) | [references/architecture.md](references/architecture.md) |
 | Find a runnable example for a flow | [references/examples.md](references/examples.md) |
 
 ## When writing code for a user

@@ -2,7 +2,7 @@
 
 Skills that teach coding agents (Claude Code, Claude.ai, Codex, Cursor, …) how to build on the
 [NEAR Intents Agent API](https://api.agentsonintents.com/llms.txt): give every AI agent its own
-custody account on NEAR Intents, let the end user sign the rules once with their own wallet, and
+agent account on NEAR Intents, let the end user sign the rules once with their own wallet, and
 let the agent swap, transfer, withdraw and receive funds inside those rules — from TypeScript,
 Python, Rust, Go or any language that speaks HTTP.
 
@@ -86,7 +86,7 @@ near-intents-agent-api/
 │   ├── executions.md            swap, withdraw, transfer, shield, deposit, quotes, chains
 │   ├── status-and-recovery.md   statuses, polling, idempotency, UNCERTAIN, /recover
 │   ├── errors.md                every error code and what to do
-│   ├── architecture.md          data model, jobs, custody models, AI tools, security checklist
+│   ├── architecture.md          data model, jobs, key ownership models, AI tools, security checklist
 │   ├── examples.md              map of the runnable TypeScript examples
 │   ├── typescript.md            @near-intents-agent-api/sdk
 │   ├── python.md                Python client + signers

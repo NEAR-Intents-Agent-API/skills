@@ -6,7 +6,7 @@
 ┌──────────── browser / app ────────────┐        ┌──────────── your backend ────────────┐        ┌── NEAR Intents Agent API ──┐
 │ owner wallet (NEAR/EVM/passkey)       │        │ naa_ key (secret store)              │        │ api.agentsonintents.com   │
 │ shows preview, signs intent.payload   │◄──────►│ BFF routes: generate / submit / read │◄──────►│ policy, grants, dispatch  │
-│ never sees naa_ / ngt_                │        │ grant tokens (encrypted)             │        │ → OutLayer custody, 1Click│
+│ never sees naa_ / ngt_                │        │ grant tokens (encrypted)             │        │ → agent wallet, 1Click   │
 └───────────────────────────────────────┘        │ AI agent runtime / tools             │        └───────────────────────────┘
                                                  │ jobs: status poller, network watch   │
                                                  └──────────────────────────────────────┘
@@ -35,12 +35,12 @@ the poller. The API is the source of truth; your table is a cache plus your retr
   pause automated agents when `custody` or `one_click` is `down`.
 - **Grant hygiene**: revoke grants of ended sessions; rotate long-lived ones.
 
-## Custody models
+## Key ownership models
 
 | Model | Owner key held by | Use when | Notes |
 |---|---|---|---|
-| **Self-custodial** (recommended) | the end user's wallet | consumer apps, wallets, AI assistants | user signs in the browser; you never touch the key |
-| **Company-as-owner** | your company (KMS/HSM key, EVM recommended) | treasury bots, B2B automation, internal agents | sign `eip712` digests with KMS; you are the custodian of that key and of the funds' control; apply your own approvals around it |
+| **User-owned key** (recommended) | the end user's wallet | consumer apps, wallets, AI assistants | user signs in the browser; you never touch the key |
+| **Company-as-owner** | your company (KMS/HSM key, EVM recommended) | treasury bots, B2B automation, internal agents | sign `eip712` digests with KMS; you hold that key and control its approvals; add your own approvals around it |
 | **Passkey owner** | user's authenticator | mobile/web without crypto wallets | needs your WebAuthn registration flow; no owner approval votes |
 
 With company-as-owner, the policy still bounds the agent, so a compromised agent runtime cannot

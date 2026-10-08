@@ -3,13 +3,13 @@
 ## The problem it solves
 
 An AI agent that pays, swaps or withdraws needs money it can move without asking a human each
-time, but the human must stay in control and the integrating app must not become a custodian.
+time, but the human must stay in control and the integrating app must not hold the owner's key.
 The API splits that into three roles:
 
 - **Owner** — the human who owns the funds. Their wallet signs the account's rules and every
   change to them. The API and the partner never hold the owner's key.
-- **Agent account** — one custody wallet on NEAR Intents per agent, run by the custody provider
-  (OutLayer, a TEE-backed signer). Funds sit there. It moves money only inside the owner-signed
+- **Agent account** — one wallet on NEAR Intents per agent, run by the wallet provider
+  (a TEE-backed signer). Funds sit there. It moves money only inside the owner-signed
   policy.
 - **Partner** — your backend. It holds the `naa_` API key, prepares owner actions, stores grant
   tokens and calls executions for its agents.
@@ -53,7 +53,7 @@ A bigger USD budget never lifts a per-asset limit and a new grant never lifts a 
 | Policy field | Enforced by | Changing only these needs |
 |---|---|---|
 | `destinations`, `budget`, `timelock_ms`, `schedule` | the API, before dispatch | one **off-chain** signature (`nep413`/`eip712`/`webauthn`), no transaction |
-| `frozen`, `actions`, `confidential`, `owner_approval`, `assets`, `limits`, `max_actions_per_hour` | the custody provider, on chain | one **on-chain** signature (`nep366` for NEAR owners; EVM/passkey sign `eip712`/`webauthn` and the API sponsors the call) |
+| `frozen`, `actions`, `confidential`, `owner_approval`, `assets`, `limits`, `max_actions_per_hour` | the wallet provider, on chain | one **on-chain** signature (`nep366` for NEAR owners; EVM/passkey sign `eip712`/`webauthn` and the API sponsors the call) |
 
 The API picks which, based on what changed; you just sign whatever `intent.standard` says.
 A policy is in force only when `GET …/policy` shows `status: "APPLIED"` and

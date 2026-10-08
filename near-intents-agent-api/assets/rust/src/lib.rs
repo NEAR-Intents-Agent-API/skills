@@ -124,8 +124,8 @@ impl AgentApi {
     }
 
     pub fn from_env() -> Result<Self> {
-        let key = std::env::var("AGENT_API_KEY").map_err(|_| Error::Invalid("AGENT_API_KEY missing".into()))?;
-        let url = std::env::var("AGENT_API_URL").ok();
+        let key = std::env::var("NEAR_INTENTS_AGENT_API_KEY").map_err(|_| Error::Invalid("NEAR_INTENTS_AGENT_API_KEY missing".into()))?;
+        let url = std::env::var("NEAR_INTENTS_AGENT_API_URL").ok();
         Self::new(key, url.as_deref())
     }
 

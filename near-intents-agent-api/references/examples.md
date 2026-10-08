@@ -6,7 +6,7 @@ port the script when writing another language.
 
 ```bash
 git clone https://github.com/NEAR-Intents-Agent-API/examples && cd examples
-cp .env.example .env        # AGENT_API_KEY from the partner dashboard; owner keys for writes
+cp .env.example .env        # NEAR_INTENTS_AGENT_API_KEY from the partner dashboard; owner keys for writes
 pnpm install
 pnpm 01:check-api
 ```

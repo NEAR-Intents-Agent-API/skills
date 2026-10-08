@@ -14,8 +14,8 @@ wallet signers, **server-side only** (it needs the API key).
 import { AgentApi, AgentApiError, AgentApiRequestError, createGrantCredential, createIdempotencyKey } from "@near-intents-agent-api/sdk";
 
 const api = new AgentApi({
-  apiKey: process.env.AGENT_API_KEY!,           // naa_… from the partner dashboard
-  baseUrl: process.env.AGENT_API_URL,           // optional; defaults to https://api.agentsonintents.com
+  apiKey: process.env.NEAR_INTENTS_AGENT_API_KEY!,           // naa_… from the partner dashboard
+  baseUrl: process.env.NEAR_INTENTS_AGENT_API_URL,           // optional; defaults to https://api.agentsonintents.com
 });
 
 await api.getNetwork();

@@ -27,10 +27,10 @@ Python, Rust, Go or any language that speaks HTTP.
 ## Start in five minutes
 
 1. **Get a key.** Create a partner API key in the [partner dashboard](https://partners.near-intents.org/) (**API keys**). The
-   `naa_…` token is shown once; store it as `AGENT_API_KEY` in your backend's secrets.
+   `naa_…` token is shown once; store it as `NEAR_INTENTS_AGENT_API_KEY` in your backend's secrets.
 2. **Check it.**
    ```bash
-   AGENT_API_KEY=naa_... ./near-intents-agent-api/scripts/check_api.sh
+   NEAR_INTENTS_AGENT_API_KEY=naa_... ./near-intents-agent-api/scripts/check_api.sh
    ```
 3. **Install the skill** (below) and ask your coding agent, e.g.
    *"Add NEAR Intents agent wallets to our FastAPI backend: onboarding with the user's NEAR

@@ -104,7 +104,8 @@ Automatic settlement stopped because something did not add up (e.g. evidence con
 `GET /v1/agents/{agent_id}/operations/{correlation_id}/proof` (an `op_…` id) returns every
 retained audit event of one execution, each `PROVEN` with a `c2sp.org/tlog-proof@v1` against the
 notary-signed checkpoint of the API's transparency log, `PENDING` until the next checkpoint covers
-it, or `UNLOGGED`. Use it to audit an execution offline without trusting the API; it does not
+it, or `UNLOGGED`. Each event's `evidence` is the result it recorded, with any settlement
+transaction hashes, committed by the opening's `evidenceHash`. Use it to audit an execution offline without trusting the API; it does not
 change the execution's status. Check it with the SDK's `verifyOperationProof(proof, origin)`, pinning
 the origin yourself (`<API host>/log`, `api.agentsonintents.com/log` for the hosted API); see
 [typescript.md](typescript.md#operation-proofs) and the examples' `11:verify-operation`.

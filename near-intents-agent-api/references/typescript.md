@@ -111,11 +111,13 @@ import { NoteError, ProofError, verifyOperationProof } from "@near-intents-agent
 
 const proof = await api.getOperationProof(agentId, "op_…");          // executions only
 const verified = verifyOperationProof(proof, "api.agentsonintents.com/log"); // pin the origin yourself
-// verified.proven: [{ index, fields, checkpoint, cosignedAt }]; verified.pending, verified.unlogged
+// verified.proven: [{ index, fields, checkpoint, cosignedAt, evidence }]; verified.pending, verified.unlogged
 ```
 
 Offline and without trusting the API: each `PROVEN` event hashes to a leaf of a checkpoint signed by
-the log key and cosigned by the notary, and names this execution. A proof that does not hold throws
+the log key and cosigned by the notary, and names this execution. Its `evidence`, the result it
+recorded with any settlement transaction hashes, must hash to the opening's `evidenceHash` and comes
+back parsed (`null` when none was served). A proof that does not hold, or altered evidence, throws
 `NoteError` or `ProofError`. `PENDING` events wait for the next checkpoint. To tie the keys to
 attested code, check the notary's TDX birth quote (`proof.notary.birth`) and compare its
 `report_data` with `verified.birthReportData`. A deployment without a log answers

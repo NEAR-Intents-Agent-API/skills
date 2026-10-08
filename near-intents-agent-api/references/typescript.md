@@ -133,7 +133,7 @@ try {
     switch (error.code) {
       case "policy_destination_denied": /* ask owner to allow the address */ break;
       case "spend_budget_exceeded":     /* show remaining budget */ break;
-      case "policy_schedule_denied":    /* outside owner hours: retry at error.availableAt, new key */ break;
+      case "policy_schedule_denied":    /* outside owner hours: same request at error.availableAt */ break;
       case "policy_change_throttled":   /* error.availableAt */ break;
       default: throw error;
     }

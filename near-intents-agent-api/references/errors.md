@@ -19,7 +19,11 @@ Every error is a JSON:API document:
 - Branch on `errors[0].code`. `title`/`detail` are for humans and may change.
 - Validation failures (`400 validation_failed`) return **one entry per field** with
   `source.pointer`; show all of them.
-- `meta.retryable: true` → the same request (same idempotency key and body) can succeed later.
+- `meta.retryable: true` → the same request (same idempotency key and body) can succeed after
+  `Retry-After`. Server failures carry it too: they may have taken effect, so only the same key is
+  safe. Absent → repeating will not help now. It says **nothing** about whether an earlier
+  attempt took effect; a new key is allowed only after a proven refusal (retry rule 4). Never
+  decide from `detail`.
 - `meta.available_at` → when a cooldown/quota/throttle lifts. 429/503 also send `Retry-After`.
 - Unknown code → fall back to the HTTP status class. Always log `meta.request_id`.
 
@@ -34,12 +38,12 @@ Every error is a JSON:API document:
 | `idempotency_key_required` | 400 | add `Idempotency-Key` |
 | `idempotency_conflict` | 409 | same key used with a different body; resend original body or use a new key for a genuinely new request |
 | `rate_limited` | 429 | wait `Retry-After`, retry the same request |
-| `database_busy` | 503 | retry with the **same** idempotency key; check status first |
+| `database_busy` | 503 | retryable; may have taken effect → retry with the **same** idempotency key, never a new one |
 | **Refusals (layer named; only that layer can lift it)** | | |
 | `agent_grant_required` | 403 | missing/revoked/expired/foreign grant → issue a grant or use the right token |
 | `policy_action_denied` | 403 | action (or confidential form) not in policy → owner `policy_update` |
 | `policy_destination_denied` | 403 | address not allowed → owner adds it to `destinations` |
-| `policy_schedule_denied` | 403 | outside the owner's `schedule` when it would run (after the timelock) → submit again at `meta.available_at` with a **new** key, or owner changes `schedule` |
+| `policy_schedule_denied` | 403 | outside the owner's `schedule` when it would run (after the timelock); nothing recorded → submit the same request at `meta.available_at`, or owner changes `schedule` |
 | `spend_budget_exceeded` | 403 | shared USD budget used up → wait for window (`usage.budget.*.resets_at`) or owner raises cap; retry with a **new** key |
 | `policy_denied` | 409 | provider-side policy refused (asset, per-asset limit, hourly rate, …) → owner `policy_update` |
 | `wallet_frozen` | 409 | owner froze the account → only `agent_unfreeze` resumes |
@@ -52,19 +56,20 @@ Every error is a JSON:API document:
 | `route_unavailable` | 400 | no route/liquidity now; nothing submitted → other pair or later, new key |
 | `quote_unavailable` | 503 | upstream quote timed out; nothing submitted → retry shortly, new key; check `/v1/network` |
 | `unsupported_chain`, `unsupported_token`, `invalid_address` | 400/409 | change chain/asset/address |
-| `wallet_busy` | 409 | another money op on this wallet is running → retry with a new key after it finishes |
+| `wallet_busy` | 409 | another money op on this wallet is running; nothing sent, refusal recorded (not retryable) → after it finishes, a **new** key |
 | `spend_price_unavailable` | 503 | no fresh USD price for budget accounting → retry later, new key |
 | `authorization_stale` | 409 | grant/key revoked or policy/owner changed between admission and dispatch → re-evaluate |
 | `deposit_quota_exceeded` | 429 | 500 deposit addresses / 24 h → wait `available_at` |
 | **Provider (custody/1Click) state** | | |
 | `provider_unavailable` | 503 | provider down/breaker open → wait; read `/v1/network` |
-| `provider_rate_limited` | 429 | wait `Retry-After` |
+| `provider_rate_limited` | 429 | reads: wait `Retry-After`, same request; executions: recorded refusal → new key after a short wait |
 | `provider_refused` | 409 | provider refused for its own reason → inspect `detail`, don't blind-retry |
 | `provider_response_invalid`, `provider_request_mismatch` | 502 | treat outcome as unknown → poll status of the same id |
 | **Owner intents** | | |
 | `intent_expired` | 409 | generate a new intent |
 | `intent_payload_mismatch`, `intent_standard_mismatch`, `intent_type_mismatch` | 409 | submit exactly what was generated, with the right standard/type |
-| `signature_invalid`, `signer_mismatch`, `owner_proof_invalid` | 400/401/409 | wrong key, altered bytes, or wrong encoding (see [signing.md](signing.md)) |
+| `signature_invalid` | 400 | malformed wallet output → submit exactly what the wallet returned |
+| `signer_mismatch`, `owner_proof_invalid`, `policy_delegate_signature_invalid` | 401/409 | wrong key or altered bytes (see [signing.md](signing.md)) |
 | `owner_key_not_full_access` | 403 | NEAR owner must sign with a FullAccess key |
 | `owner_nonce_invalid` | 409 | intent used/expired → regenerate |
 | `intent_generation_recovery_required` | 409 | retry `generate-intent` with the same idempotency key |
@@ -77,7 +82,7 @@ Every error is a JSON:API document:
 | `agent_not_bound` | 409 | onboarding not finished → wait for `agent_create` SUCCESS |
 | `agent_archived`, `agent_deleted`, `agent_deletion_pending` | 409 | lifecycle state forbids it; restore or stop |
 | `sponsor_busy`, `sponsor_balance_insufficient` | 503 | retry the same submit later |
-| `transaction_unconfirmed` | 503 | broadcast but unconfirmed → poll status; do not resubmit |
+| `transaction_unconfirmed` | 503 | retryable; broadcast but unconfirmed → poll status, or repeat with the **same** key (never sends twice); never as new work |
 | `execution_not_cancellable` | 409 | op already left `QUEUED` |
 | `approval_closed`, `approval_already_voted`, `approval_not_allowed` | 409 | read the approval's current state |
 | **Grants** | | |
@@ -98,11 +103,21 @@ Every error is a JSON:API document:
    `correlation_id`. Never invent a new key for the same intent to "unstick" it.
 2. **Refusal codes (403, most 409)**: the request is wrong for the current state. Retrying the
    same thing won't help; change state (policy, grant, balance) or the request.
-3. **"Nothing was submitted" codes** (`route_unavailable`, `quote_unavailable`,
-   `spend_budget_exceeded`, `policy_schedule_denied`, `spend_price_unavailable`, `wallet_busy`): the API rolled back; a
-   later attempt is a new request → **new** idempotency key.
-4. **Throttles** (429): wait until `available_at` / `Retry-After`.
-5. **Status-level outcomes** (`FAILED`, `REFUNDED`, `UNCERTAIN`, `NEEDS_REVIEW`) are not HTTP
+3. **Server failures** (`internal_error` 500, `database_busy` 503, `transaction_unconfirmed` 503,
+   all with `meta.retryable`): the request may have taken effect. Repeat it with the **same** key,
+   which replays or reconciles it, or read status. Never a new key: that can spend twice.
+4. **Proven refusals** (`route_unavailable`, `quote_unavailable`, `spend_budget_exceeded`,
+   `spend_price_unavailable`, `wallet_busy`, and the policy/grant/validation refusals in the
+   decision table): nothing was sent and the key replays the refusal; a later attempt is a new
+   request → **new** idempotency key. Only these permit a new key. A `FAILED` or `REFUNDED`
+   status is **not** such proof: a partial failure is `FAILED`. Read its `details` and the
+   balances, and send new work only as an explicit decision, never as an automatic retry.
+5. **Earlier work under the key** (`intent_generation_recovery_required`,
+   `operation_not_recoverable`, `operation_not_pending`, any error from `/recover`, and any error
+   after a server failure or lost response): the original outcome may still be unknown. Keep the original key and
+   `correlation_id`, read status, and never start the same work under a new key.
+6. **Throttles** (429): wait until `available_at` / `Retry-After`.
+7. **Status-level outcomes** (`FAILED`, `REFUNDED`, `UNCERTAIN`, `NEEDS_REVIEW`) are not HTTP
    errors; see [status-and-recovery.md](status-and-recovery.md).
 
 ## Wrapping errors in your code

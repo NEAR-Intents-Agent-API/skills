@@ -83,7 +83,7 @@ response and minify them without reordering.
 Browser wallets: `wallet.signDelegateActions({ delegateActions: [intent.payload] })` and submit
 `signedDelegateActions[0]`. The API's sponsor relays it; the owner pays no gas.
 
-`signature_invalid` / `intent_payload_mismatch` on nep366 almost always means args bytes,
+`policy_delegate_signature_invalid` / `intent_payload_mismatch` on nep366 almost always means args bytes,
 nonce (stale access-key read: use finality `final` and sign right away) or the wrong key.
 
 ## eip712 — EVM owners

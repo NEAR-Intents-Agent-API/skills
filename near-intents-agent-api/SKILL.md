@@ -34,7 +34,12 @@ Follow these in every integration; most bugs and lost-fund incidents come from b
 4. **Every money-moving call carries an `Idempotency-Key`** (8–128 chars `[A-Za-z0-9._:-]`).
    Create it, persist it with the request, *then* send. Retry only with the same key and body.
 5. **`UNCERTAIN` means "maybe executed".** Keep polling the original `correlation_id`. Never
-   resubmit with a new key; `/recover` is only for provably-undispatched operations.
+   resubmit with a new key; `/recover` is only for provably-undispatched operations. An
+   execution the provider may have received answers `202 UNCERTAIN`. A server failure
+   (`internal_error`, `database_busy`, `transaction_unconfirmed`) carries `meta.retryable` and
+   may have taken effect: repeat it under the **same** key. A missing `meta.retryable` is not
+   proof that nothing was sent: use a new key only after a proven refusal (see
+   [errors.md](references/errors.md) retry rules).
 6. **`NEEDS_REVIEW` means stop.** Do not poll or retry; inspect `details.reason`, resolve, then
    `GET /v1/status?correlation_id=…&refresh=true`.
 7. **Policies are always sent complete**, with `expected_revision` from `GET …/policy`. On

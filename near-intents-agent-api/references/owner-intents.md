@@ -134,7 +134,8 @@ Adapt to your wallet library's result shape (near-connect / wallet-selector retu
 |---|---|
 | `intent_expired` (409) | signing window closed → generate again |
 | `intent_payload_mismatch`, `intent_standard_mismatch` | the payload or standard was altered → sign the original |
-| `signature_invalid`, `signer_mismatch` | wrong key/account signed → have the `signer` wallet sign |
+| `signature_invalid` | malformed wallet output → submit exactly what the wallet returned |
+| `signer_mismatch` | wrong key/account signed → have the `signer` wallet sign |
 | `owner_key_not_full_access` (403) | NEAR key is a function-call key → use a FullAccess key |
 | `owner_nonce_invalid` | intent already used/expired → generate again |
 | `policy_revision_conflict` (409) | re-read `GET …/policy`, regenerate with its `revision`, re-sign |
@@ -144,7 +145,7 @@ Adapt to your wallet library's result shape (near-connect / wallet-selector retu
 | `owner_approval_unsupported` | `owner_approval: true` needs a NEAR owner |
 | `agent_creation_quota_exceeded` (429) | 100 agents/24h → wait for `available_at` or ask for a higher quota |
 | `sponsor_busy` / `sponsor_balance_insufficient` (503) | retry the same submit later |
-| `transaction_unconfirmed` (503) | broadcast but not confirmed → poll status, don't resubmit a new intent |
+| `transaction_unconfirmed` (503) | broadcast but not confirmed → poll status, or submit the same signed intent again (never sends twice); never generate a new intent for it |
 | `agent_not_bound` | the agent is still onboarding → wait for `agent_create` SUCCESS |
 
 ## Recipes

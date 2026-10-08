@@ -128,8 +128,8 @@ class AgentApi:
     @classmethod
     def from_env(cls) -> "AgentApi":
         return cls(
-            api_key=os.environ["AGENT_API_KEY"],
-            base_url=os.environ.get("AGENT_API_URL", DEFAULT_BASE_URL),
+            api_key=os.environ["NEAR_INTENTS_AGENT_API_KEY"],
+            base_url=os.environ.get("NEAR_INTENTS_AGENT_API_URL", DEFAULT_BASE_URL),
         )
 
     def for_grant(self, grant_token: str) -> "AgentApi":

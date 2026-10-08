@@ -170,11 +170,11 @@ The `Policy` shape is in [policy.md](policy.md).
 ## curl cheatsheet
 
 ```bash
-H=(-H "X-API-Key: $AGENT_API_KEY" -H "Content-Type: application/json")
-curl -s "$AGENT_API_URL/v1/agents?external_user_id=user_123" "${H[@]}"
-curl -s "$AGENT_API_URL/v1/agents/$AGENT_ID/policy" "${H[@]}"
-curl -s "$AGENT_API_URL/v1/agents/$AGENT_ID/balances?source=public" "${H[@]}"
-curl -s "$AGENT_API_URL/v1/status?correlation_id=$CID&wait_ms=30000" "${H[@]}"
-curl -s -X POST "$AGENT_API_URL/v1/agents/$AGENT_ID/swap" "${H[@]}" -H "X-Grant-Token: $GRANT" \
+H=(-H "X-API-Key: $NEAR_INTENTS_AGENT_API_KEY" -H "Content-Type: application/json")
+curl -s "$NEAR_INTENTS_AGENT_API_URL/v1/agents?external_user_id=user_123" "${H[@]}"
+curl -s "$NEAR_INTENTS_AGENT_API_URL/v1/agents/$AGENT_ID/policy" "${H[@]}"
+curl -s "$NEAR_INTENTS_AGENT_API_URL/v1/agents/$AGENT_ID/balances?source=public" "${H[@]}"
+curl -s "$NEAR_INTENTS_AGENT_API_URL/v1/status?correlation_id=$CID&wait_ms=30000" "${H[@]}"
+curl -s -X POST "$NEAR_INTENTS_AGENT_API_URL/v1/agents/$AGENT_ID/swap" "${H[@]}" -H "X-Grant-Token: $GRANT" \
   -d '{"origin_asset":"nep141:wrap.near","destination_asset":"'"$USDC"'","amount":"100000000000000000000000","dry":true}'
 ```

@@ -52,12 +52,12 @@ Follow these in every integration; most bugs and lost-fund incidents come from b
 ## Quick start (5 minutes, any language)
 
 1. Create a partner API key in the **[partner dashboard](https://partners.near-intents.org/)** (**API keys**). The `naa_…` token is
-   shown once — put it in your backend's secret store as `AGENT_API_KEY`.
+   shown once — put it in your backend's secret store as `NEAR_INTENTS_AGENT_API_KEY`.
 2. Smoke-test:
    ```bash
    curl -s https://api.agentsonintents.com/v1/network            # public: service health
-   curl -s https://api.agentsonintents.com/v1/whoami -H "X-API-Key: $AGENT_API_KEY"
-   curl -s https://api.agentsonintents.com/v1/quotas -H "X-API-Key: $AGENT_API_KEY"
+   curl -s https://api.agentsonintents.com/v1/whoami -H "X-API-Key: $NEAR_INTENTS_AGENT_API_KEY"
+   curl -s https://api.agentsonintents.com/v1/quotas -H "X-API-Key: $NEAR_INTENTS_AGENT_API_KEY"
    ```
    Or run [scripts/check_api.sh](scripts/check_api.sh).
 3. Follow the lifecycle below. Full walkthrough: [references/getting-started.md](references/getting-started.md).
@@ -115,7 +115,7 @@ The Python and Rust signers are verified byte-for-byte against near-api-js and v
 
 ## When writing code for a user
 
-- Read `AGENT_API_URL`/`AGENT_API_KEY` from env; the base URL is `https://api.agentsonintents.com`
+- Read `NEAR_INTENTS_AGENT_API_URL`/`NEAR_INTENTS_AGENT_API_KEY` from env; the base URL is `https://api.agentsonintents.com`
   unless the user runs a self-hosted or local deployment (then only the base URL changes).
 - Show `preview.summary` (and `preview.policy` / `preview.deletion`) to the owner before signing.
 - Read `GET /v1/network` before acting and after `quote_unavailable`, `route_unavailable` or

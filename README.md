@@ -1,12 +1,20 @@
-# NEAR Intents Agent API — Agent Skills
+<div align="center">
 
-Skills that teach coding agents (Claude Code, Claude.ai, Codex, Cursor, …) how to build on the
-[NEAR Intents Agent API](https://api.agentsonintents.com/llms.txt): give every AI agent its own
-agent account on NEAR Intents, let the end user sign the rules once with their own wallet, and
-let the agent swap, transfer, withdraw and receive funds inside those rules — from TypeScript,
-Python, Rust, Go or any language that speaks HTTP.
+# NEAR Intents Agent API: Agent Skills
 
-## What the API does, in one minute
+**Teach your coding agent to build on the NEAR Intents Agent API, in any language.**
+
+[Overview](#overview) · [Quick start](#quick-start) · [Install](#install) · [What's inside](#whats-inside) · [Verify the bundled code](#verify-the-bundled-code)
+
+</div>
+
+## Overview
+
+A skill for coding agents (Claude Code, Claude.ai, Codex, Cursor, Copilot, Gemini CLI, …) that
+knows the [NEAR Intents Agent API](https://api.agentsonintents.com/llms.txt): give every AI agent
+its own agent account on NEAR Intents, let the end user sign the rules once with their own
+wallet, and let the agent swap, transfer, withdraw and receive funds inside those rules. Works for
+TypeScript, Python, Rust, Go or anything that speaks HTTP.
 
 ```
  your backend (partner)            end user (owner)                  AI agent
@@ -18,57 +26,67 @@ Python, Rust, Go or any language that speaks HTTP.
                                                                        … only inside the owner-signed policy
 ```
 
-- **Policy = what** may happen: actions, assets, per-asset limits, allowed destinations, USD
-  budget, timelock, weekly schedule, owner approval, freeze.
+- **Policy = what** may happen: actions, assets, per-asset limits, destinations, USD budget,
+  timelock, weekly schedule, owner approval, freeze.
 - **Grant = who** may act: one revocable token per session, assistant or bot.
-- Your backend never holds the owner's key; the browser never sees your API key; the model never
-  sees either.
+- Your backend never holds the owner's key, the browser never sees your API key, and the model
+  never sees either.
 
-## Start in five minutes
+## Quick start
 
-1. **Get a key.** Create a partner API key in the [partner dashboard](https://partners.near-intents.org/) (**API keys**). The
-   `naa_…` token is shown once; store it as `NEAR_INTENTS_AGENT_API_KEY` in your backend's secrets.
+1. **Get a key.** Create a partner API key in the [partner dashboard](https://partners.near-intents.org/) (**API keys**).
+   The `naa_…` token is shown once; store it as `NEAR_INTENTS_AGENT_API_KEY` in your backend's secrets.
 2. **Check it.**
-   ```bash
+   ```sh
    NEAR_INTENTS_AGENT_API_KEY=naa_... ./near-intents-agent-api/scripts/check_api.sh
    ```
-3. **Install the skill** (below) and ask your coding agent, e.g.
+3. **Install the skill** (below) and ask your coding agent, for example:
    *"Add NEAR Intents agent wallets to our FastAPI backend: onboarding with the user's NEAR
    wallet, one grant per chat session, and a swap tool for the assistant."*
 
-The hosted API (`https://api.agentsonintents.com`) is mainnet with real funds. Build with small
-amounts and dedicated owner accounts.
+> [!WARNING]
+> The hosted API (`https://api.agentsonintents.com`) is mainnet with real funds. Build with small
+> amounts and dedicated owner accounts.
 
 ## Install
 
-### Claude Code (plugin marketplace)
+<details open>
+<summary><b>Claude Code</b> (plugin marketplace)</summary>
 
 ```text
 /plugin marketplace add NEAR-Intents-Agent-API/skills
 /plugin install near-intents-agent-api@near-intents-agent-api
 ```
 
-### Claude Code (copy)
+Or copy the skill:
 
-```bash
+```sh
 git clone https://github.com/NEAR-Intents-Agent-API/skills
 cp -R skills/near-intents-agent-api ~/.claude/skills/            # all projects
 # or: cp -R skills/near-intents-agent-api .claude/skills/         # this project only
 ```
 
-### Claude.ai / Claude Desktop
+</details>
+
+<details>
+<summary><b>Claude.ai / Claude Desktop</b></summary>
 
 Zip the `near-intents-agent-api` folder and upload it under **Settings → Capabilities → Skills**.
 
-### Other agents (Codex, Cursor, Copilot, Gemini CLI, …)
+</details>
 
-Copy `near-intents-agent-api/` into your repository (e.g. `docs/skills/`) and point your agent
-instructions file (`AGENTS.md`, `.cursor/rules`, …) at it:
+<details>
+<summary><b>Other agents</b> (Codex, Cursor, Copilot, Gemini CLI, …)</summary>
+
+Copy `near-intents-agent-api/` into your repository (for example `docs/skills/`) and point your
+agent instructions file (`AGENTS.md`, `.cursor/rules`, …) at it:
 
 ```md
 When working with the NEAR Intents Agent API, read docs/skills/near-intents-agent-api/SKILL.md
 first and follow its rules and references.
 ```
+
+</details>
 
 ## What's inside
 
@@ -93,29 +111,28 @@ near-intents-agent-api/
 │   ├── rust.md                  Rust client + signers
 │   └── other-languages.md       Go client, OpenAPI codegen, Java/Kotlin/C# notes
 ├── assets/
-│   ├── python/near_intents_agent_api.py   copy-in client + NEAR/EVM signers
-│   ├── python/test_vectors.py             signer self-test
-│   ├── rust/                              async client + signers (feature `evm`) + tests
-│   └── test-vectors.json                  ground-truth signatures from near-api-js / viem
-└── scripts/check_api.sh                   read-only smoke test for a key
+│   ├── python/                  copy-in client + NEAR/EVM signers, signer self-test
+│   ├── rust/                    async client + signers (feature `evm`) + tests
+│   └── test-vectors.json        ground-truth signatures from near-api-js / viem
+└── scripts/check_api.sh         read-only smoke test for a key
 ```
 
-The demo app built on the same API runs at <https://demo.agentsonintents.com>.
+## Verify the bundled code
 
-## Related repositories
+The Python and Rust signers reproduce, byte for byte, signatures produced by near-api-js and viem:
 
-- TypeScript SDK: [`@near-intents-agent-api/sdk`](https://www.npmjs.com/package/@near-intents-agent-api/sdk)
-  (its default `baseUrl` is `https://api.agentsonintents.com`)
-- Runnable examples: <https://github.com/NEAR-Intents-Agent-API/examples>
-- Live contract: `https://api.agentsonintents.com/openapi.json`, guide: `/llms.txt`
-
-## Verifying the bundled code
-
-```bash
+```sh
 cd near-intents-agent-api/assets
 pip install httpx cryptography eth-account && python python/test_vectors.py
 cd rust && cargo test --features evm
 ```
 
-Both reproduce, byte for byte, signatures produced by near-api-js and viem. If you port the
-signers to another language, make it pass the same `test-vectors.json`.
+> [!TIP]
+> Porting the signers to another language? Make it pass the same `test-vectors.json`.
+
+## Related
+
+- [`@near-intents-agent-api/sdk`](https://www.npmjs.com/package/@near-intents-agent-api/sdk): TypeScript client ([source](https://github.com/NEAR-Intents-Agent-API/sdk-typescript))
+- [examples](https://github.com/NEAR-Intents-Agent-API/examples): runnable TypeScript scripts
+- [api](https://github.com/NEAR-Intents-Agent-API/api): the service; contract at `https://api.agentsonintents.com/openapi.json`, guide at `/llms.txt`
+- [demo](https://demo.agentsonintents.com): an app built on the same API

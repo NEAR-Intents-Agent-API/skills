@@ -9,7 +9,7 @@ Policy = {
   frozen: boolean,
   actions: ("swap" | "transfer" | "withdraw")[],          // unique; deposits are always allowed
   confidential: boolean,                                  // shield/unshield + confidential form of each action
-  owner_approval: boolean,                                // every outgoing money action waits for a vote (NEAR owners only)
+  owner_approval: boolean,                                // every outgoing money action waits for the owner's vote
   assets: "any" | string[],                               // asset_id values, ≤128
   limits: {                                               // per-asset caps, atomic strings (1–78 digits)
     per_transaction?: Record<asset_id, string>,
@@ -143,7 +143,7 @@ prove it controls the account, for example to log in to a service. Omit it and n
 
 Pause overnight instead: `{"mode":"except","time_zone":"UTC","windows":[{"days":["mon","tue","wed","thu","fri","sat","sun"],"start":"22:00","end":"07:00"}]}`.
 
-**Human-in-the-loop** (NEAR owner only): as above with `"owner_approval": true`.
+**Human-in-the-loop** (any owner type): as above with `"owner_approval": true`.
 
 **Broad, capped by USD**: `"actions": ["swap","transfer","withdraw"]`, `"assets": "any"`,
 `"limits": {}`, `"destinations": {"mode":"any","list":[]}`, budget set. Only for owners who
@@ -173,5 +173,5 @@ generic error.
 
 A malformed policy returns `400 validation_failed` with one error per field
 (`source.pointer` like `/policy/destinations/list/0/address`). Other policy-related codes:
-`policy_revision_conflict`, `policy_reconciliation_required`, `owner_approval_unsupported`,
+`policy_revision_conflict`, `policy_reconciliation_required`,
 `policy_blocks_delete` (an old-shape policy must be re-signed before deletion).

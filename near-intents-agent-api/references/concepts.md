@@ -87,16 +87,18 @@ Both return a `correlation_id`; `GET /v1/status?correlation_id=` reads either.
 ## Owners
 
 - **NEAR**: a named account (`alice.near`) and one of its **FullAccess** ed25519 keys. Signs
-  `nep366` (on-chain changes, gasless: the API's sponsor pays) and `nep413` (off-chain). Only NEAR
-  owners can use `owner_approval` and `approval_vote`.
+  `nep366` (on-chain changes, gasless: the API's sponsor pays) and `nep413` (off-chain).
 - **EVM**: any secp256k1 EOA (MetaMask, Rabby, a KMS key). The API derives a deterministic NEAR
   account from the public key and deploys it on first use, sponsored. Signs `eip712`. No
-  EIP-1271 contract wallets.
+  EIP-1271 contract wallets. **Off by default for new agents** while the EVM wallet build is a
+  pre-release: a deployment without it answers `owner_type_unsupported` and leaves `evm` out of
+  `supported_owner_types` on `GET /v1/network`. Existing EVM-owned agents keep working.
 - **Passkey**: WebAuthn ES256 credential; also gets a derived NEAR account. Signs `webauthn` in
   the browser only.
 
 The owner is fixed for the account's life: no key rotation, no recovery, no transfer of
-ownership. Pick the owner type deliberately.
+ownership. Pick the owner type deliberately. Every owner type can use `owner_approval` and vote
+with `approval_vote`; EVM and passkey votes are confirmed by the owner's `0s` wallet.
 
 ## Money and assets
 

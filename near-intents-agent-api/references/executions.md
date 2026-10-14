@@ -75,7 +75,17 @@ the client a ~150 s timeout. `withdraw` with `async: true` returns as soon as it
 ## Transfer
 
 - To another NEAR Intents account (`recipient` = NEAR account id), no bridge, near-instant.
-- `confidential: true` spends from and to confidential balances.
+  A recipient is a named account (`alice.near`), a 64-hex implicit account or a lowercase `0x`
+  EVM address.
+- `confidential: true` spends from and to confidential balances. Shield first if the agent's
+  confidential balance is short.
+- **near.com addresses.** near.com shows its users' Intents account as `nearcom:<account>`
+  (e.g. `nearcom:0x20b6…2367`). The API takes only the bare account: strip `nearcom:` and
+  lowercase the rest. near.com users see their confidential balance, so send them a
+  `confidential: true` transfer by default. A public transfer still works when the user asks for
+  one, but it lands in the recipient's legacy public balance, which near.com does not show by
+  default: tell the user before sending. A `nearcom:` address is not on any chain: never
+  `withdraw` to it.
 
 ## Shield / unshield
 

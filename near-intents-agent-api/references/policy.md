@@ -50,7 +50,7 @@ Unknown fields are rejected (strict objects). Field names are snake_case.
 | `actions` | which money actions exist at all. Missing → `policy_action_denied` | provider |
 | `confidential` | enables `shield`, `unshield`, and `confidential: true` on swap/withdraw/transfer | provider |
 | `owner_approval` | outgoing actions go `PENDING_APPROVAL` until the owner votes; deposits unaffected. Hard limits still reject first | provider |
-| `assets` | tokens the agent may touch (`"any"` or explicit ids) | provider |
+| `assets` | tokens the agent may spend (`"any"` or explicit ids). Swaps may buy unlisted tokens but not sell them | provider |
 | `limits` | per-asset caps per transaction and per rolling hour/day/month. Needs named assets to be meaningful | provider |
 | `max_actions_per_hour` | rate cap on money actions regardless of amount | provider |
 | `destinations` | where withdrawals/transfers may go | **API** |

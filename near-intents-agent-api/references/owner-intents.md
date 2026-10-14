@@ -25,7 +25,7 @@ The API builds the exact bytes, so the partner never assembles anything security
 | `grant_issue` | `label`, `credential` (sha256 hex of token), `expires_at` (≤365 days) | see [grants.md](grants.md) |
 | `grant_revoke` | `grant_id` | committed operations still finish |
 | `execution_cancel` | `correlation_id` of a `QUEUED` op | only while the timelock holds it |
-| `approval_vote` | `approval_id`, `verdict: "approve" \| "reject"` | NEAR owners only |
+| `approval_vote` | `approval_id`, `verdict: "approve" \| "reject"` | any owner; EVM/passkey votes go through their `0s` wallet |
 
 ## Generate response
 
@@ -142,7 +142,6 @@ Adapt to your wallet library's result shape (near-connect / wallet-selector retu
 | `policy_reconciliation_required` | another policy intent is still open → wait for it to settle/expire |
 | `policy_change_throttled` / `agent_unfreeze_throttled` (429) | wait until `meta.available_at` (also on `GET /v1/agents/{id}` cooldowns) |
 | `wallet_already_frozen` / `wallet_already_unfrozen` | already in that state |
-| `owner_approval_unsupported` | `owner_approval: true` needs a NEAR owner |
 | `agent_creation_quota_exceeded` (429) | 100 agents/24h → wait for `available_at` or ask for a higher quota |
 | `sponsor_busy` / `sponsor_balance_insufficient` (503) | retry the same submit later |
 | `transaction_unconfirmed` (503) | broadcast but not confirmed → poll status, or submit the same signed intent again (never sends twice); never generate a new intent for it |
@@ -167,7 +166,7 @@ poll GET …/policy until status APPLIED && provider_policy_synced
 **Cancel a timelocked payment**: list `GET …/executions/scheduled`, then `execution_cancel`
 with that `correlation_id` before `execute_after`.
 
-**Approve a payment** (policy `owner_approval: true`, NEAR owner): list `GET …/approvals`, show
+**Approve a payment** (policy `owner_approval: true`, any owner type): list `GET …/approvals`, show
 `request_data`, then `approval_vote` with `verdict`. The execution moves out of
 `PENDING_APPROVAL`; keep polling its `op_…` id.
 

@@ -78,7 +78,7 @@ Every error is a JSON:API document:
 | `policy_reconciliation_required` | 409 | another policy intent still open → wait |
 | `policy_change_throttled`, `agent_unfreeze_throttled` | 429 | cooldown → wait `available_at` |
 | `wallet_already_frozen`, `wallet_already_unfrozen` | 409 | no-op; state already as requested |
-| `owner_type_unsupported`, `owner_approval_unsupported`, `approval_vote_owner_unsupported` | 400/409 | feature needs another owner type (approval = NEAR only) |
+| `owner_type_unsupported` | 400 | this deployment does not accept that owner type for new agents (check `supported_owner_types` on `GET /v1/network`; EVM is off by default until the final EVM wallet build) |
 | `agent_creation_quota_exceeded` | 429 | 100 agents/24 h → wait or request quota |
 | `agent_not_bound` | 409 | onboarding not finished → wait for `agent_create` SUCCESS |
 | `agent_archived`, `agent_deleted`, `agent_deletion_pending` | 409 | lifecycle state forbids it; restore or stop |
@@ -86,6 +86,8 @@ Every error is a JSON:API document:
 | `transaction_unconfirmed` | 503 | retryable; broadcast but unconfirmed → poll status, or repeat with the **same** key (never sends twice); never as new work |
 | `execution_not_cancellable` | 409 | op already left `QUEUED` |
 | `approval_closed`, `approval_already_voted`, `approval_not_allowed` | 409 | read the approval's current state |
+| `approval_signature_invalid` | 401 | the vote was not signed by the owner's key or wallet → regenerate and sign again |
+| `approval_vote_unsupported` | 409 | the provider lists no such owner wallet build on this network → ask the operator; nothing was stored |
 | **Grants** | | |
 | `grant_limit_reached` | 409 | 50 live grants → revoke unused |
 | `grant_credential_reused` | 409 | new token per grant |

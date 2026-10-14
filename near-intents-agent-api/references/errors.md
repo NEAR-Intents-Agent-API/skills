@@ -82,6 +82,7 @@ Every error is a JSON:API document:
 | `agent_creation_quota_exceeded` | 429 | 100 agents/24 h → wait or request quota |
 | `agent_not_bound` | 409 | onboarding not finished → wait for `agent_create` SUCCESS |
 | `agent_archived`, `agent_deleted`, `agent_deletion_pending` | 409 | lifecycle state forbids it; restore or stop |
+| `pause_before_archive`, `unpause_before_restore` | 409 | `agent_freeze` before `agent_archive`; `agent_unfreeze` before `agent_restore` |
 | `sponsor_busy`, `sponsor_balance_insufficient` | 503 | retry the same submit later |
 | `transaction_unconfirmed` | 503 | retryable; broadcast but unconfirmed → poll status, or repeat with the **same** key (never sends twice); never as new work |
 | `execution_not_cancellable` | 409 | op already left `QUEUED` |

@@ -56,6 +56,7 @@ Every error is a JSON:API document:
 | `route_unavailable` | 400 | no route/liquidity now; nothing submitted → other pair or later, new key |
 | `quote_unavailable` | 503 | upstream quote timed out; nothing submitted → retry shortly, new key; check `/v1/network` |
 | `unsupported_chain`, `unsupported_token`, `invalid_address` | 400/409 | change chain/asset/address |
+| `wrapped_unsupported` | 400 | drop `wrapped`; it only applies to NEAR withdrawn to chain `near` |
 | `wallet_busy` | 409 | another money op on this wallet is running; nothing sent, refusal recorded (not retryable) → after it finishes, a **new** key |
 | `spend_price_unavailable` | 503 | no fresh USD price for budget accounting → retry later, new key |
 | `authorization_stale` | 409 | grant/key revoked or policy/owner changed between admission and dispatch → re-evaluate |

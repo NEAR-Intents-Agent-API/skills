@@ -6,7 +6,7 @@ All are `POST /v1/agents/{agent_id}/<action>` and return `202` with a `StatusRes
 | Action | Headers | Body | Policy needs |
 |---|---|---|---|
 | `swap` | key, grant, idem | `origin_asset`, `destination_asset`, `amount`, `min_amount_out?`, `confidential?`, `dry?` | `swap` (+`confidential`) |
-| `withdraw` | key, grant, idem | `asset`, `amount`, `chain`, `recipient`, `memo?`, `confidential?`, `async?`, `dry?` | `withdraw`, destination allowed |
+| `withdraw` | key, grant, idem | `asset`, `amount`, `chain`, `recipient`, `memo?`, `confidential?`, `wrapped?`, `async?`, `dry?` | `withdraw`, destination allowed |
 | `transfer` | key, grant, idem | `asset`, `amount`, `recipient`, `confidential?` | `transfer`, destination allowed |
 | `shield` / `unshield` | key, grant, idem | `asset`, `amount` | `confidential: true` |
 | `deposit` | key, idem | `origin_asset`, `destination_asset?`, `amount?`, `confidential?` | nothing (always allowed) |
@@ -65,6 +65,9 @@ the client a ~150 s timeout. `withdraw` with `async: true` returns as soon as it
   `eth`, `arb`, `op`, `pol`, `avax`, `sol`, `btc`, `hood`, `hypercore`. Confidential withdrawals
   reach every 1Click chain.
 - `memo` for chains/exchanges that need one (the policy's `only` rule matches memo exactly).
+- NEAR (`nep141:wrap.near`, or `near`) withdrawn to chain `near` arrives as **native NEAR**, as from
+  a NEAR wallet or 1Click: no `wrap.near` registration needed, and what exchanges and invoices
+  expect. `wrapped: true` delivers wNEAR instead; only for that route (`wrapped_unsupported`).
 - The asset must be withdrawable to that chain (`unsupported_chain`, `unsupported_token`
   otherwise); `invalid_address` when the provider rejects the address format.
 - `details.destination_tx_hash` appears once the destination chain confirms.

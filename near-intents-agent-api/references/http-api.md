@@ -83,7 +83,7 @@ Details: [owner-intents.md](owner-intents.md), signing: [signing.md](signing.md)
 | Path | Auth | Body |
 |---|---|---|
 | `/swap` | key, grant, idem | `origin_asset`, `destination_asset`, `amount`, `min_amount_out?`, `confidential?`, `dry?` |
-| `/withdraw` | key, grant, idem | `asset`, `amount`, `chain`, `recipient`, `memo?`, `confidential?`, `async?`, `dry?` |
+| `/withdraw` | key, grant, idem | `asset`, `amount`, `chain`, `recipient`, `memo?`, `confidential?`, `wrapped?`, `async?`, `dry?` |
 | `/transfer` | key, grant, idem | `asset`, `amount`, `recipient` (NEAR Intents account), `confidential?` |
 | `/shield`, `/unshield` | key, grant, idem | `asset`, `amount` |
 | `/deposit` | key, idem | `origin_asset`, `destination_asset?`, `amount?`, `confidential?` |

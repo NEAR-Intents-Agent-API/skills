@@ -122,11 +122,11 @@ changes on chain); `DELETED`; `ABANDONED` (creation expired or failed, never usa
 
 ## Cooldowns
 
-- Ordinary policy change: next one allowed 10 minutes after the last (per agent) →
+- Ordinary policy change: next one allowed 5 minutes after the last (per agent) →
   `policy_change_throttled` (429, `meta.available_at`). Creating the account does not start it.
 - Pure `agent_freeze` is never throttled (it is the emergency brake).
-- `agent_unfreeze` has its own cooldown: an unfreeze is allowed 10 minutes after the previous
+- `agent_unfreeze` has its own cooldown: an unfreeze is allowed 5 minutes after the previous
   unfreeze → `agent_unfreeze_throttled`. So a freeze right after an unfreeze can leave the
-  account frozen for up to 10 minutes; check before freezing in tests and demos.
+  account frozen for up to 5 minutes; check before freezing in tests and demos.
 - `GET /v1/agents/{id}` → `cooldowns.policy_change_available_at` / `unfreeze_available_at` tell
   you before you ask the owner to sign.

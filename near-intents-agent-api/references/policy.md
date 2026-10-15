@@ -159,11 +159,11 @@ explicitly accept that the agent can send anywhere.
 6. Submit, wait `SUCCESS`, then poll `GET …/policy` until `APPLIED` and
    `provider_policy_synced: true`. Until then executions fail with `policy_not_ready`.
 
-Cooldowns (per agent, default 10 minutes):
+Cooldowns (per agent, default 5 minutes):
 - any ordinary change (anything other than a pure freeze/unfreeze) → next ordinary change waits
   → `policy_change_throttled` with `meta.available_at`;
 - `agent_freeze` is never throttled;
-- an unfreeze waits 10 minutes after the previous unfreeze → `agent_unfreeze_throttled`;
+- an unfreeze waits 5 minutes after the previous unfreeze → `agent_unfreeze_throttled`;
 - `agent_create` does not start a cooldown, so a freshly created agent can be edited at once.
 
 Plan UX around it: batch edits into one signature, and show `available_at` instead of a

@@ -172,7 +172,9 @@ with that `correlation_id` before `execute_after`.
 charge (`FAILED`, `details.never_executed`). `approve` re-runs the admission checks first: a
 revoked or expired grant, a frozen or changed policy, or a destination no longer allowed refuses
 the vote (`authorization_stale`, `wallet_frozen`, `policy_destination_denied`), nothing is
-sent, and the request stays held for a `reject`.
+sent, and the request stays held for a `reject`. `approval_not_recorded` means the API has not
+yet recorded the request under its approval (its dispatch reply was lost): send the same vote
+again a few minutes later.
 
 **Delete**: withdraw balances first, `agent_delete`, show `preview.deletion`; refuse to proceed
 in your UI when `assets_lost` is true unless the owner explicitly accepts.

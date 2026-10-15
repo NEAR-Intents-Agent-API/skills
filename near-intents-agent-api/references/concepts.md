@@ -76,8 +76,10 @@ Both return a `correlation_id`; `GET /v1/status?correlation_id=` reads either.
    the `schedule` open at the moment it would run (now + `timelock_ms`).
    Refusal = error response, nothing recorded.
 2. **Wait** — `timelock_ms > 0` → `QUEUED` until `execute_after` (owner may `execution_cancel`).
-   `owner_approval` → `PENDING_APPROVAL` until the owner's `approval_vote`. A release outside
-   the `schedule` fails the operation; nothing is sent.
+   `owner_approval` → `PENDING_APPROVAL` until the owner's `approval_vote`. An `approve`
+   re-runs step 1 (grant live, not frozen, destination allowed; not the schedule) before the
+   release and refuses the vote when it fails; a `reject` releases the budget charge. A release
+   outside the `schedule` fails the operation; nothing is sent.
 3. **Dispatch commit** — the `schedule` is checked once more, then `dispatch_committed_at` is
    set and the request goes to the provider.
    From here, revoking the grant/key or freezing does **not** stop this operation.

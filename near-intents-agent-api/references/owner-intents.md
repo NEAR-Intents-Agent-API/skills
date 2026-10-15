@@ -168,7 +168,11 @@ with that `correlation_id` before `execute_after`.
 
 **Approve a payment** (policy `owner_approval: true`, any owner type): list `GET …/approvals`, show
 `request_data`, then `approval_vote` with `verdict`. The execution moves out of
-`PENDING_APPROVAL`; keep polling its `op_…` id.
+`PENDING_APPROVAL`; keep polling its `op_…` id. `reject` ends it and releases its budget
+charge (`FAILED`, `details.never_executed`). `approve` re-runs the admission checks first: a
+revoked or expired grant, a frozen or changed policy, or a destination no longer allowed refuses
+the vote (`authorization_stale`, `wallet_frozen`, `policy_destination_denied`), nothing is
+sent, and the request stays held for a `reject`.
 
 **Delete**: withdraw balances first, `agent_delete`, show `preview.deletion`; refuse to proceed
 in your UI when `assets_lost` is true unless the owner explicitly accepts.

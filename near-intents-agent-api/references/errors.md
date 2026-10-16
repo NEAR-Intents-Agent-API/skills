@@ -60,7 +60,7 @@ Every error is a JSON:API document:
 | `wallet_busy` | 409 | another money op on this wallet is running; nothing sent, refusal recorded (not retryable) → after it finishes, a **new** key |
 | `spend_price_unavailable` | 503 | no fresh USD price for budget accounting → retry later, new key |
 | `authorization_stale` | 409 | grant/key revoked or policy/owner changed between admission and dispatch → re-evaluate |
-| `deposit_quota_exceeded` | 429 | 500 deposit addresses / 24 h → wait `available_at` |
+| `deposit_quota_exceeded` | 429 | 100 deposit addresses / 24 h for this agent → wait `available_at` |
 | **Provider (wallet service/1Click) state** | | |
 | `provider_unavailable` | 503 | provider down/breaker open → wait; read `/v1/network` |
 | `provider_rate_limited` | 429 | reads: wait `Retry-After`, same request; executions: recorded refusal → new key after a short wait |

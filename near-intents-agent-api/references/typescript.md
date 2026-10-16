@@ -87,7 +87,7 @@ Also: `withdraw`, `transfer`, `shield`, `unshield`, `recover(agentId, { correlat
 `listAgents({ external_user_id, cursor })`, `getAgent`, `getWallet`, `getBalances(id, { source, asset })`,
 `getPolicy`, `getPolicyHistory`, `listGrants`, `listScheduledExecutions`, `getContainment`,
 `listApprovals`, `getApproval`, `getAddress(id, "near")`, `listProviderRecords(id, kind)`,
-`getHistory(id, { cursor, limit })`, `getStatus(cid, { waitMs, refresh })`,
+`getHistory(id, { cursor, limit, include_unpaid })`, `getStatus(cid, { waitMs, refresh })`,
 `getOperationProof(id, cid)`.
 
 ## Identity signing

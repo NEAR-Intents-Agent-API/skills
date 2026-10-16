@@ -34,7 +34,9 @@ GET /v1/status?correlation_id=<id>&wait_ms=30000
   minutes for swaps/transfers, longer for cross-chain withdrawals and deposits). For
   `PENDING_APPROVAL` / `PENDING_DEPOSIT` hand control back to the user and poll on a slower
   schedule (or when they return).
-- `GET /v1/agents/{id}/history` lists everything for an activity feed (newest first).
+- `GET /v1/agents/{id}/history` lists everything for an activity feed (newest first). Deposit
+  addresses nothing was paid into (open, expired, closed by deletion) are left out unless
+  `include_unpaid=true`; read one by its `op_…` id with `GET /v1/status`.
 - A single long poll does not promise settlement; `SUCCESS` means reconciled evidence, not just
   a broadcast hash.
 

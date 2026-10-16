@@ -111,7 +111,8 @@ Idempotency-Key: dep:user123:<uuid>
 - Response `PENDING_DEPOSIT` with `details.deposit_address` (send funds **only** there),
   `details.memo` (include it if present), `details.min_amount`, `details.expires_at`.
 - Then poll the `op_…` id: `PENDING_DEPOSIT` → `PROCESSING` → `SUCCESS`.
-- Quota: 500 deposit addresses per tenant per rolling 24 h → `deposit_quota_exceeded` (429).
+- Without `amount` an address stays open 3 days; with it, 24 h. Each lookup issues a new address.
+- Quota: 100 deposit addresses per agent per rolling 24 h → `deposit_quota_exceeded` (429).
 - Native NEAR-side funding: `GET …/addresses/near` returns the account; send NEP-141 tokens to it.
 
 Never show the `correlation_id` as a payment address. Use a fresh idempotency key per deposit

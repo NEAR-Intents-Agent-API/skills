@@ -47,7 +47,7 @@ Or run `scripts/check_api.sh` from this skill. A `401 invalid_api_key` means the
 revoked, has stray whitespace, or was sent to a different deployment than the one that issued it.
 
 Default partner limits (check `/v1/quotas` for yours): 100 new agents per rolling 24 h, 10 API
-keys, a per-minute request rate per tenant and per key, 500 deposit addresses per 24 h, 10
+keys, a per-minute request rate per tenant and per key, 100 deposit addresses per agent per 24 h, 10
 concurrent `wait_ms` long-polls per key, 50 live grants per agent.
 
 ## 3. Pick tokens

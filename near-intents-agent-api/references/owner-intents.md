@@ -21,7 +21,7 @@ The API builds the exact bytes, so the partner never assembles anything security
 | `agent_freeze` | — | emergency stop; immediate; never throttled |
 | `agent_unfreeze` | — | own cooldown (`agent_unfreeze_throttled`) |
 | `agent_archive` / `agent_restore` | — | hides/unhides from default lists; nothing changes on chain. `agent_archive` needs a frozen account, and `agent_restore` needs an unfrozen one; otherwise `pause_before_archive` / `unpause_before_restore` |
-| `agent_delete` | — | `preview.deletion` lists balances and `assets_lost`; withdraw first, there is no sweep |
+| `agent_delete` | — | `preview.deletion` lists balances and `assets_lost`; withdraw first, there is no sweep. Open deposit addresses never block it: deletion closes them (`agent_deleted`), and funds sent later are lost |
 | `grant_issue` | `label`, `credential` (sha256 hex of token), `expires_at` (≤365 days) | see [grants.md](grants.md) |
 | `grant_revoke` | `grant_id` | committed operations still finish |
 | `execution_cancel` | `correlation_id` of a `QUEUED` op | only while the timelock holds it |

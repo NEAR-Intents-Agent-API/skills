@@ -226,8 +226,11 @@ class AgentApi:
     def list_grants(self, agent_id: str) -> list[dict[str, Any]]:
         return self.request("GET", f"/v1/agents/{agent_id}/grants")["data"]
 
-    def get_history(self, agent_id: str, limit: int = 25, cursor: str | None = None) -> dict[str, Any]:
-        return self.request("GET", f"/v1/agents/{agent_id}/history", query={"limit": limit, "cursor": cursor})
+    def get_history(
+        self, agent_id: str, limit: int = 25, cursor: str | None = None, include_unpaid: bool | None = None
+    ) -> dict[str, Any]:
+        query = {"limit": limit, "cursor": cursor, "include_unpaid": include_unpaid}
+        return self.request("GET", f"/v1/agents/{agent_id}/history", query=query)
 
     def list_scheduled(self, agent_id: str, limit: int = 25, cursor: str | None = None) -> dict[str, Any]:
         return self.request("GET", f"/v1/agents/{agent_id}/executions/scheduled", query={"limit": limit, "cursor": cursor})

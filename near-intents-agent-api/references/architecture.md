@@ -51,7 +51,7 @@ exceed it; protect the owner key separately from the runtime that holds grant to
 - One API key per environment; tag every agent with `external_user_id` = your user id and
   filter with `GET /v1/agents?external_user_id=`.
 - Enforce in your BFF that a user can only generate/submit for their own agents and intents.
-- Default limits per tenant: 100 agents / 24 h, 500 deposit addresses / 24 h; plan onboarding
+- Default limits: 100 agents / 24 h per tenant, 100 deposit addresses / 24 h per agent; plan onboarding
   bursts accordingly (`/v1/quotas`).
 
 ## AI agent tool design

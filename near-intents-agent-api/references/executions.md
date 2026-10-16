@@ -61,15 +61,14 @@ the client a ~150 s timeout. `withdraw` with `async: true` returns as soon as it
 
 ## Withdraw
 
-- Leaves NEAR Intents to `recipient` on `chain`. Public withdrawals reach `near`, `base`, `bsc`,
-  `eth`, `arb`, `op`, `pol`, `avax`, `sol`, `btc`, `hood`, `hypercore`. Confidential withdrawals
-  reach every 1Click chain.
+- Leaves NEAR Intents to `recipient` on `chain`. Public and confidential withdrawals reach every
+  `blockchain` value `GET /v1/tokens` lists (`near`, `eth`, `sol`, `btc`, `tron`, …).
 - `memo` for chains/exchanges that need one (the policy's `only` rule matches memo exactly).
 - NEAR (`nep141:wrap.near`, or `near`) withdrawn to chain `near` arrives as **native NEAR**, as from
   a NEAR wallet or 1Click: no `wrap.near` registration needed, and what exchanges and invoices
   expect. `wrapped: true` delivers wNEAR instead; only for that route (`wrapped_unsupported`).
-- The asset must be withdrawable to that chain (`unsupported_chain`, `unsupported_token`
-  otherwise); `invalid_address` when the provider rejects the address format.
+- `unsupported_chain` means a chain the catalog doesn't list; `route_unavailable` means no
+  liquidity for that asset now; `invalid_address` when the provider rejects the address format.
 - `details.destination_tx_hash` appears once the destination chain confirms.
 
 ## Transfer

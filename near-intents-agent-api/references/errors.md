@@ -54,7 +54,7 @@ Every error is a JSON:API document:
 | `insufficient_balance` | 409 | fund the account or lower amount |
 | `amount_too_low` | 400 | below route minimum → quote a larger amount |
 | `route_unavailable` | 400 | no route/liquidity now; nothing submitted → other pair or later, new key |
-| `quote_unavailable` | 503 | upstream quote timed out; nothing submitted → retry shortly, new key; check `/v1/network` |
+| `quote_unavailable` | 503 | upstream quote got no answer; nothing submitted → retry shortly, new key; check `/v1/network` |
 | `unsupported_chain`, `unsupported_token`, `invalid_address` | 400/409 | change chain/asset/address |
 | `wrapped_unsupported` | 400 | drop `wrapped`; it only applies to NEAR withdrawn to chain `near` |
 | `wallet_busy` | 409 | another money op on this wallet is running; nothing sent, refusal recorded (not retryable) → after it finishes, a **new** key |
@@ -63,6 +63,7 @@ Every error is a JSON:API document:
 | `deposit_quota_exceeded` | 429 | 100 deposit addresses / 24 h for this agent → wait `available_at` |
 | **Provider (wallet service/1Click) state** | | |
 | `provider_unavailable` | 503 | provider down/breaker open → wait; read `/v1/network` |
+| `provider_limit_reached` | 429 | custody provider's daily quota for this wallet: 100 operations / rolling 24 h, `dry` previews included, quotes not; nothing sent → new work at `available_at` (don't burn the quota on repeated previews) |
 | `provider_rate_limited` | 429 | reads: wait `Retry-After`, same request; executions: recorded refusal → new key after a short wait |
 | `provider_refused` | 409 | provider refused for its own reason → inspect `detail`, don't blind-retry |
 | `provider_response_invalid`, `provider_request_mismatch` | 502 | treat outcome as unknown → poll status of the same id |

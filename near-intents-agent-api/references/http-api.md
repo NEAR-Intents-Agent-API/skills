@@ -12,8 +12,8 @@ guide is `GET /llms.txt`. If this file and the server disagree, the server wins.
   | Header | When |
   |---|---|
   | `X-API-Key: naa_…` | every endpoint except `/v1/network`, `/v1/tokens` |
-  | `X-Grant-Token: ngt_…` | swap, withdraw, transfer, shield, unshield, recover, sign (not dry quotes, not deposit) |
-  | `Idempotency-Key` | required on executions and deposit (not on `dry: true`); optional on `generate-intent`. 8–128 chars `[A-Za-z0-9._:-]` |
+  | `X-Grant-Token: ngt_…` | swap, withdraw (including `dry: true` previews), transfer, shield, unshield, recover, sign (not swap quotes, not deposit) |
+  | `Idempotency-Key` | required on executions, withdrawal previews and deposit (not on swap quotes); optional on `generate-intent`. 8–128 chars `[A-Za-z0-9._:-]` |
   | `Content-Type: application/json` | every body |
 - Responses carry `x-request-id`; errors repeat it as `meta.request_id`. Log it.
 - **Amounts**: atomic integer strings, up to 78 digits. **USD**: decimal strings (`"50"`, `"12.5"`).
@@ -90,8 +90,9 @@ Details: [owner-intents.md](owner-intents.md), signing: [signing.md](signing.md)
 | `/recover` | key, grant, idem (original) | `correlation_id`, `request: { type, …original body }` |
 | `/sign` → 200 | key, grant | `message`, `encoding?`, `recipient` (must be in the policy's `sign.recipients`; never `intents.near`/`intents.far`) |
 
-`dry: true` on swap/withdraw → 200 `{ dry: true, type, quote }`; no grant, no idempotency key
-needed. Details: [executions.md](executions.md).
+`dry: true` on swap/withdraw → 200 `{ dry: true, type, quote }`. A swap quote needs no grant and no
+idempotency key; a withdrawal preview needs both (same key replays it for 60 s; 20 per agent per
+rolling 24 h, failures included: `withdraw_preview_limit_reached`). Details: [executions.md](executions.md).
 
 ## Core shapes
 

@@ -84,7 +84,8 @@ owner signs ──► agent_create (policy) ──► grant_issue (token commitm
    grant; `amount` optional) returns `details.deposit_address`, `min_amount`, `expires_at`,
    optional `memo`, and `refund_to` (the agent's own balance).
 4. **Act** — `POST /v1/agents/{agent_id}/swap|transfer|withdraw|shield|unshield` with
-   `X-API-Key`, `X-Grant-Token`, `Idempotency-Key`. Quote first with `dry: true` (swap/withdraw).
+   `X-API-Key`, `X-Grant-Token`, `Idempotency-Key`. Quote first with `dry: true`: a swap quote needs only `X-API-Key`; a withdrawal preview needs
+   the grant and a key, like the withdrawal (20 per agent per rolling 24 h).
 5. **Observe** — `GET /v1/status?correlation_id=…&wait_ms=30000` until it stops moving.
 
 Every owner action (policy edits, freeze, grant revoke, approval votes, cancel, delete) is the

@@ -247,8 +247,14 @@ class AgentApi:
         """Dry run: no grant, no idempotency key, no budget charge."""
         return self.request("POST", f"/v1/agents/{agent_id}/swap", body={**request, "dry": True})
 
-    def quote_withdraw(self, agent_id: str, request: dict[str, Any]) -> dict[str, Any]:
-        return self.request("POST", f"/v1/agents/{agent_id}/withdraw", body={**request, "dry": True})
+    def quote_withdraw(
+        self, agent_id: str, request: dict[str, Any], idempotency_key: str | None = None
+    ) -> dict[str, Any]:
+        """Withdrawal preview: needs the grant and a key (a fresh one unless passed). The same key
+        replays an identical preview for 60 s; 20 previews per agent per rolling 24 h, failures included."""
+        return self._execute(
+            agent_id, "withdraw", {**request, "dry": True}, idempotency_key or create_idempotency_key()
+        )
 
     def _execute(self, agent_id: str, action: str, request: dict[str, Any], idempotency_key: str) -> dict[str, Any]:
         return self.request(

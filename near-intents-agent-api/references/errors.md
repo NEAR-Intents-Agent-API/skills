@@ -45,6 +45,9 @@ Every error is a JSON:API document:
 | `policy_destination_denied` | 403 | address not allowed → owner adds it to `destinations` |
 | `policy_schedule_denied` | 403 | outside the owner's `schedule` when it would run (after the timelock); nothing recorded → submit the same request at `meta.available_at`, or owner changes `schedule` |
 | `spend_budget_exceeded` | 403 | shared USD budget used up → wait for window (`usage.budget.*.resets_at`) or owner raises cap; retry with a **new** key |
+| `policy_limit_exceeded` | 403 | the asset's hourly/daily/monthly limit would be passed (shield/unshield count too) → wait for the window or owner raises it; retry with a **new** key |
+| `policy_action_limit_exceeded` | 403 | `max_actions_per_hour` used up → wait for the hour or owner raises it; retry with a **new** key |
+| `policy_usage_unavailable` | 409 | earlier actions have no per-asset count and a limit applies; nothing sent → clears when they leave the window, or the operator reconciles them |
 | `policy_denied` | 409 | provider-side policy refused (asset, per-asset limit, hourly rate, …) → owner `policy_update` |
 | `wallet_frozen` | 409 | owner froze the account → only `agent_unfreeze` resumes |
 | `policy_not_ready` | 409 | latest policy not yet in force → wait for the policy intent to settle |
@@ -112,7 +115,7 @@ Every error is a JSON:API document:
    all with `meta.retryable`): the request may have taken effect. Repeat it with the **same** key,
    which replays or reconciles it, or read status. Never a new key: that can spend twice.
 4. **Proven refusals** (`route_unavailable`, `quote_unavailable`, `spend_budget_exceeded`,
-   `spend_price_unavailable`, `wallet_busy`, and the policy/grant/validation refusals in the
+   `policy_limit_exceeded`, `policy_action_limit_exceeded`, `spend_price_unavailable`, `wallet_busy`, and the policy/grant/validation refusals in the
    decision table): nothing was sent and the key replays the refusal; a later attempt is a new
    request → **new** idempotency key. Only these permit a new key. A `FAILED` or `REFUNDED`
    status is **not** such proof: a partial failure is `FAILED`. Read its `details` and the

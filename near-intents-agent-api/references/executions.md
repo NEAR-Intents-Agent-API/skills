@@ -93,6 +93,8 @@ the client a ~150 s timeout. `withdraw` with `async: true` returns as soon as it
 
 Move `amount` of `asset` between the public and confidential balance of the same account.
 Read both with `GET …/balances?source=public|confidential`.
+Each move counts toward the asset's per-asset limits and `max_actions_per_hour` like any other
+action (`policy_limit_exceeded` / `policy_action_limit_exceeded`), even though nothing leaves the account.
 
 ## Deposit (fund the account)
 

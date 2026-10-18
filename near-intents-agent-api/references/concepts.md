@@ -42,6 +42,8 @@ layer can lift it:
 | `policy_action_denied` | policy `actions` / `confidential` | owner `policy_update` |
 | `policy_destination_denied` | policy `destinations` | owner `policy_update` |
 | `spend_budget_exceeded` | policy `budget` (USD, shared) | owner raises cap, or wait for the window |
+| `policy_limit_exceeded`, `policy_action_limit_exceeded` | policy `limits` (hourly/daily/monthly) / `max_actions_per_hour`, counted by the API | owner raises the limit, or wait for the window |
+| `policy_usage_unavailable` | earlier actions the API has no per-asset count for | wait until they leave the window, or the operator reconciles them |
 | `policy_schedule_denied` | policy `schedule` (owner's weekly hours) | submit again at `meta.available_at`, or owner changes `schedule` |
 | `policy_denied` | provider-enforced policy (assets, per-asset limits, rate, …) | owner `policy_update` |
 | `policy_not_ready` | latest policy not yet in force | wait for the pending policy intent |
@@ -52,7 +54,8 @@ A bigger USD budget never lifts a per-asset limit and a new grant never lifts a 
 
 | Policy field | Enforced by | Changing only these needs |
 |---|---|---|
-| `destinations`, `budget`, `timelock_ms`, `schedule` | the API, before dispatch | one **off-chain** signature (`nep413`/`eip712`/`webauthn`), no transaction |
+| `destinations`, `budget`, `timelock_ms`, `schedule` | the API, before dispatch |
+| `limits` over a window, `max_actions_per_hour` | **both**: the API counts them at dispatch, the provider checks them again | one **on-chain** signature, as below | one **off-chain** signature (`nep413`/`eip712`/`webauthn`), no transaction |
 | `frozen`, `actions`, `confidential`, `owner_approval`, `assets`, `limits`, `max_actions_per_hour` | the wallet provider, on chain | one **on-chain** signature (`nep366` for NEAR owners; EVM/passkey sign `eip712`/`webauthn` and the API sponsors the call) |
 
 The API picks which, based on what changed; you just sign whatever `intent.standard` says.

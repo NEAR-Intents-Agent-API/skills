@@ -51,8 +51,8 @@ Unknown fields are rejected (strict objects). Field names are snake_case.
 | `confidential` | enables `shield`, `unshield`, and `confidential: true` on swap/withdraw/transfer | provider |
 | `owner_approval` | outgoing actions go `PENDING_APPROVAL` until the owner votes; deposits unaffected. Hard limits still reject first | provider |
 | `assets` | tokens the agent may spend (`"any"` or explicit ids). Swaps may buy unlisted tokens but not sell them | provider |
-| `limits` | per-asset caps per transaction and per rolling hour/day/month. Needs named assets to be meaningful | provider |
-| `max_actions_per_hour` | rate cap on money actions regardless of amount | provider |
+| `limits` | per-asset caps per transaction and per rolling hour/day/month. Needs named assets to be meaningful | provider; windows also **API** |
+| `max_actions_per_hour` | rate cap on money actions regardless of amount | provider and **API** |
 | `destinations` | where withdrawals/transfers may go | **API** |
 | `budget` | total USD value across all assets, rolling 24 h / 7 d / 30 d; shared by every grant | **API** |
 | `timelock_ms` | every outgoing money action is `QUEUED` this long; owner can `execution_cancel` | **API** |
@@ -62,6 +62,13 @@ Unknown fields are rejected (strict objects). Field names are snake_case.
 price fails with `spend_price_unavailable` (only while a budget is set). A larger budget never
 lifts a per-asset limit; both must pass. Live usage is in `GET …/policy` →
 `usage.budget.{daily,weekly,monthly}.{limit_usd, spent_usd, remaining_usd, resets_at}`.
+
+`limits` notes: the API also counts hourly/daily/monthly limits and `max_actions_per_hour` per
+agent, shared by every grant, at dispatch. Swaps, withdrawals, transfers, **shield and unshield**
+all count; `near` and `nep141:wrap.near` share one count. Pending/uncertain actions count until
+settled; a completed one counts for the full window after completion; removing a limit keeps the
+usage. Over → `policy_limit_exceeded` / `policy_action_limit_exceeded` (403); earlier actions
+without a count → `policy_usage_unavailable` (409). Remaining per-asset allowance is not readable.
 
 `destinations` notes:
 - `only` + `[]` (the safe default) keeps funds inside the account: swaps only.

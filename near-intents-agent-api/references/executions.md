@@ -22,7 +22,10 @@ POST …/withdraw  { "asset": "<usdc>", "amount": "5000000", "chain": "base", "r
 → 200 { "dry": true, "type": "swap", "quote": { …1Click quote, snake_cased… } }
 ```
 
-Dry runs need no grant and no idempotency key, charge no budget and move nothing. The `quote`
+Dry runs charge no budget and move nothing. A swap quote needs no grant and no idempotency key. A
+withdrawal preview needs the grant and an `Idempotency-Key`: the same key replays an identical
+preview for 60 s, an expired one needs a new key, and each agent gets 20 previews per rolling 24 h,
+failed ones included (`withdraw_preview_limit_reached`). The `quote`
 object belongs to 1Click (amount out, fees, time estimate); treat its fields as informational
 and do not hard-code its shape. Use it to show the user expected output and to choose
 `min_amount_out` (slippage floor).
@@ -90,6 +93,8 @@ the client a ~150 s timeout. `withdraw` with `async: true` returns as soon as it
 
 Move `amount` of `asset` between the public and confidential balance of the same account.
 Read both with `GET …/balances?source=public|confidential`.
+Each move counts toward the asset's per-asset limits and `max_actions_per_hour` like any other
+action (`policy_limit_exceeded` / `policy_action_limit_exceeded`), even though nothing leaves the account.
 
 ## Deposit (fund the account)
 

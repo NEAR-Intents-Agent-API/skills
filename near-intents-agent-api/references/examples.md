@@ -39,15 +39,16 @@ dedicated low-value owner account.
 | `06:freeze` | `06-policy-and-lifecycle/02-freeze-and-unfreeze.ts` | emergency stop, cooldown-aware |
 | `06:archive-and-delete` | `06-policy-and-lifecycle/03-archive-and-delete.ts` | archive, restore, delete preview |
 | `06:schedule` | `06-policy-and-lifecycle/04-schedule.ts` | weekly hours, `policy_schedule_denied` |
-| `07:enable-signing` | `07-identity-signing/01-enable-signing.ts` | owner adds a `sign` recipient (on chain) |
-| `07:sign-and-verify` | `07-identity-signing/02-sign-and-verify.ts` | challenge → `sign` → relying-party verification |
-| `07:refusals` | `07-identity-signing/03-refusals.ts` | every signing refusal, incl. `intents.near`/`intents.far` |
-| `07:disable-signing` | `07-identity-signing/04-disable-signing.ts` | remove one recipient or `sign` entirely |
+| `07:enable-native` | `07-native-accounts/01-enable-native.ts` | owner switches on `native.near.sign_message` (and with `evm` a typed-data domain), on chain |
+| `07:sign-and-verify` | `07-native-accounts/02-sign-and-verify.ts` | challenge → `nativeNearSignMessage` → relying-party verification |
+| `07:evm-typed-data` | `07-native-accounts/03-evm-typed-data.ts` | EIP-712 under a listed domain, signer recovered; another domain refused |
+| `07:refusals` | `07-native-accounts/04-refusals.ts` | every native refusal, incl. `intents.near`/`intents.far` |
+| `07:disable-native` | `07-native-accounts/05-disable-native.ts` | remove one service or omit `native` entirely |
 | `08:error-taxonomy` | `08-errors-and-recovery/01-error-taxonomy.ts` | real error documents |
 | `08:status-and-uncertain` | `08-errors-and-recovery/02-status-and-uncertain.ts` | classify a status; when recovery is legal |
 | `08:idempotency` | `08-errors-and-recovery/03-idempotency.ts` | replay with the same key |
 | `08:recover` | `08-errors-and-recovery/04-recover.ts` | when `/recover` is legal, with the original key and grant |
-| `09:reads` / `09:owner-flow` / `09:execution` / `09:sign` | `09-raw-http/*` | the same flows with plain `fetch` (best template for other languages) |
+| `09:reads` / `09:owner-flow` / `09:execution` / `09:native` | `09-raw-http/*` | the same flows with plain `fetch` (best template for other languages) |
 | `10:bff-pattern` | `10-recipes/01-bff-pattern.ts` | browser ↔ backend boundary |
 | `10:timelocked-payout` | `10-recipes/02-timelocked-payout.ts` | timelock, scheduled list, cancel |
 | `10:ai-assistant` | `10-recipes/03-ai-assistant.ts` | grant per assistant, tool → API mapping |
@@ -58,6 +59,7 @@ Useful support modules to copy: `support/sign-near-intent.ts` (server-side NEAR 
 NEP-413 + NEP-366), `support/evm-owner.ts` (EVM owner descriptor + EIP-712),
 `support/policy.ts` (policy builders), `support/destinations.ts`, `support/flow.ts`
 (generate → sign → submit → wait), `support/raw-http.ts` (fetch client with JSON:API errors),
-`support/identity.ts` (identity challenges and NEP-413 signature verification).
+`support/identity.ts` (identity challenges and NEP-413 signature verification), `support/native.ts`
+(the `native` policy block).
 
 Python and Rust equivalents of the client and signers ship with this skill in `assets/`.

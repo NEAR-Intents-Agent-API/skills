@@ -2,7 +2,7 @@
 
 One complete, owner-signed rulebook per agent account. Every grant acts within it. Each
 `agent_create` and `policy_update` carries the **whole** policy, never a diff; every field below
-is required except `schedule` and `sign`.
+is required except `schedule` and `native`.
 
 ```ts
 Policy = {
@@ -22,7 +22,18 @@ Policy = {
   budget: { daily_usd: string | null, weekly_usd: string | null, monthly_usd: string | null },
   timelock_ms: number,                                    // 0 … 2_592_000_000 (30 days)
   schedule?: Schedule,                                    // omit = money actions may run any time
-  sign?: { recipients: string[] }                         // omit = the agent signs nothing; 1–256 NEAR accounts
+  native?: Native                                         // omit = every native method off
+}
+
+Native = {                                                // when present, every key is required
+  near:   { sign_message: string[], transfer: boolean, call: string[] },   // 0–256 NEAR accounts each
+  evm:    { sign_typed_data: EvmTypedDataDomain[], sign_message: boolean, sign_transaction: boolean },
+  solana: { sign_message: boolean, sign_transaction: boolean },
+}
+
+EvmTypedDataDomain = {                                    // ≥1 field, 0–64 unique entries
+  name?: string, version?: string, chain_id?: number | string,
+  verifying_contract?: string, salt?: string,             // lowercase 0x
 }
 
 Destination =
@@ -87,24 +98,49 @@ without a count → `policy_usage_unavailable` (409). Remaining per-asset allowa
 - Refusal: `403 policy_schedule_denied` with `meta.available_at` (next allowed moment) and
   `Retry-After`. Submit again at `available_at` with a **new** `Idempotency-Key`, or the owner
   changes `schedule`. A same-key replay returns the original operation, not a fresh judgement.
-- Exempt: deposits, `sign` and owner approval votes.
+- Exempt: deposits, `native` requests and owner approval votes.
 - Not sent to the provider: a schedule-only edit is an off-chain owner signature.
 
-## Signing (`sign`)
+## Native accounts (`native`)
 
-`sign: { recipients: ["login.example.near"] }` lets any grant ask the agent's key to sign an
-identity challenge for those NEAR accounts (`POST /v1/agents/{agent_id}/sign`), so the agent can
-prove it controls the account, for example to log in to a service. Omit it and nothing is signed.
+`native` lets every grant use the agent's own keys outside NEAR Intents, one method at a time.
+Omit it and every native method is off. A policy update replaces the whole policy, so leaving
+`native` out of an update turns it off.
 
-- Only the canonical `near-intents-agent-api.identity.v1` challenge is signed (exact fields
-  `domain, purpose, chain, audience, challenge, issued_at_ms, expires_at_ms`; `audience` =
-  `recipient`; lives ≤ 5 minutes). Never a transaction, an intent or free text.
-- `intents.near` and `intents.far` (the NEAR Intents contracts) are never recipients: the policy is
-  refused with `validation_failed`, a request with `403 signing_recipient_forbidden`.
-- Moves no value: `timelock_ms`, `schedule`, `budget` and `owner_approval` do not apply.
-- Off unless the owner adds it. Warn the owner before signing it: a listed service may treat the
-  signature as the account logging in, so list only trusted services.
-- Changing `sign` is an on-chain policy update (the wallet provider enforces the same list).
+| Switch | Route (`POST /v1/agents/{agent_id}/native/…`) | What it allows |
+|---|---|---|
+| `near.sign_message: ["login.example.near"]` | `near/sign-message` | NEP-413 identity challenge for a listed service, so the agent proves it controls `near_account_id` |
+| `near.transfer: true` | `near/transfer` (Idempotency-Key) | native NEAR from `near_account_id` to any account |
+| `near.call: ["app.example.near"]` | `near/call` (Idempotency-Key) | a function call on a listed contract |
+| `evm.sign_typed_data: [domain, …]` | `evm/sign-typed-data` | EIP-712 v4 under a listed domain only |
+| `evm.sign_message: true` | `evm/sign-message` | EIP-191 message |
+| `evm.sign_transaction: true` | `evm/sign-transaction` | any EVM transaction |
+| `solana.sign_message` / `solana.sign_transaction` | `solana/sign-message` / `solana/sign-transaction` | Solana message / transaction |
+
+- **The switch is the whole fence.** `destinations`, `budget`, `timelock_ms`, `schedule` and
+  `owner_approval` do not apply. A native NEAR transfer can go anywhere; a typed-data signature
+  (a permit, a `TransferWithAuthorization`) or a signed transaction can move everything at that
+  EVM or Solana address. Warn the owner before they sign it on; prefer `sign_typed_data` with
+  narrow domains over `sign_transaction`.
+- **Typed-data domains** match field for field: a request's `domain` must equal one entry, a
+  missing or extra field is another domain. `chainId` may be a number, decimal or hex string.
+  `types.EIP712Domain` may be omitted (derived); when sent it declares exactly those fields in
+  EIP-712 order with standard types. `primaryType: "EIP712Domain"` is refused. Hyperliquid's
+  `Exchange` domain (trading) never signs a `HyperliquidSignTransaction` withdrawal.
+- **Identity challenge:** `near/sign-message` signs only the canonical
+  `near-intents-agent-api.identity.v1` challenge (exact fields `domain, purpose, chain, audience,
+  challenge, issued_at_ms, expires_at_ms`; `audience` = `recipient`; lives ≤ 5 minutes). Never a
+  transaction, an intent or free text.
+- `intents.near` and `intents.far` are never accepted: listing them is `validation_failed`, a
+  transfer or call to them `403 native_contract_forbidden`, a signature for them
+  `403 signing_recipient_forbidden`.
+- The wallet provider treats native NEAR as wNEAR: a transfer or call deposit needs `assets` to
+  allow `nep141:wrap.near` (or `any`) and stays within its `limits`.
+- Signing routes return the signature and never broadcast. NEAR transfer and call are sent by the
+  wallet provider and read like any execution (`GET /v1/status`, type `native`).
+- Freezing the account stops every native route. Changing `native` is an on-chain policy update.
+- Addresses: `wallet.near_account_id`, `wallet.evm_account_id` (same on every EVM chain) and
+  `wallet.solana_account_id`; the last two are null until the provider reports them.
 
 ## Ready-made policies
 

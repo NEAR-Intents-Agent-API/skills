@@ -90,19 +90,27 @@ Also: `withdraw`, `transfer`, `shield`, `unshield`, `recover(agentId, { correlat
 `getHistory(id, { cursor, limit, include_unpaid })`, `getStatus(cid, { waitMs, refresh })`,
 `getOperationProof(id, cid)`.
 
-## Identity signing
+## Native accounts
 
-With a grant, and only for recipients in the policy's `sign.recipients` (never `intents.near` or
-`intents.far`), the API signs a canonical identity challenge with the agent's NEAR key (NEP-413):
+With a grant, and only for methods the policy's `native` block switches on
+([policy.md](policy.md#native-accounts-native)):
 
 ```ts
-const signature = await agent.sign(agentId, { message: canonicalChallengeJson, recipient: "login.example.near" });
-// signature: { near_account_id, public_key, signature (hex), nonce (base64), recipient }
+// NEP-413 identity challenge for a service listed in native.near.sign_message
+const proof = await agent.nativeNearSignMessage(agentId, { message: canonicalChallengeJson, recipient: "login.example.near" });
+// { correlation_id, near_account_id, public_key, signature (hex), nonce (base64), recipient }
+
+// EIP-712 under a domain listed in native.evm.sign_typed_data
+const { signature } = await agent.nativeEvmSignTypedData(agentId, { chain: "arbitrum", typed_data });
+
+// Native NEAR from near_account_id (native.near.transfer); idempotent like any execution
+const sent = await agent.nativeNearTransfer(agentId, { to: "bob.near", amount: "1000000000000000000000000" }, { idempotencyKey });
 ```
 
-The challenge format is in [policy.md](policy.md#signing-sign). The relying party verifies the
-NEP-413 signature over `message`, `nonce` and `recipient`, and that `public_key` is a full-access
-key of `near_account_id`; the examples' `support/identity.ts` does both.
+Also `nativeNearCall`, `nativeEvmSignMessage`, `nativeEvmSignTransaction`,
+`nativeSolanaSignMessage`, `nativeSolanaSignTransaction`. Signing methods return the signature and
+never broadcast. For identity, the relying party verifies the NEP-413 signature over `message`,
+`nonce` and `recipient`, and that `public_key` is a full-access key of `near_account_id`.
 
 ## Operation proofs
 

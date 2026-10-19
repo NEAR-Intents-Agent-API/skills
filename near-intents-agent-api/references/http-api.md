@@ -12,7 +12,7 @@ guide is `GET /llms.txt`. If this file and the server disagree, the server wins.
   | Header | When |
   |---|---|
   | `X-API-Key: naa_…` | every endpoint except `/v1/network`, `/v1/tokens` |
-  | `X-Grant-Token: ngt_…` | swap, withdraw (including `dry: true` previews), transfer, shield, unshield, recover, sign (not swap quotes, not deposit) |
+  | `X-Grant-Token: ngt_…` | swap, withdraw (including `dry: true` previews), transfer, shield, unshield, recover, every `native/…` route (not swap quotes, not deposit) |
   | `Idempotency-Key` | required on executions, withdrawal previews and deposit (not on swap quotes); optional on `generate-intent`. 8–128 chars `[A-Za-z0-9._:-]` |
   | `Content-Type: application/json` | every body |
 - Responses carry `x-request-id`; errors repeat it as `meta.request_id`. Log it.
@@ -88,7 +88,26 @@ Details: [owner-intents.md](owner-intents.md), signing: [signing.md](signing.md)
 | `/shield`, `/unshield` | key, grant, idem | `asset`, `amount` |
 | `/deposit` | key, idem | `origin_asset`, `destination_asset?`, `amount?`, `confidential?` |
 | `/recover` | key, grant, idem (original) | `correlation_id`, `request: { type, …original body }` |
-| `/sign` → 200 | key, grant | `message`, `encoding?`, `recipient` (must be in the policy's `sign.recipients`; never `intents.near`/`intents.far`) |
+
+### Native accounts (all `POST /v1/agents/{agent_id}/native/…`, key + grant)
+
+| Path | Policy switch | Body | Reply |
+|---|---|---|---|
+| `near/sign-message` → 200 | `near.sign_message` lists `recipient` | `message`, `encoding?` (`utf8`/`hex`), `recipient` | `{ correlation_id, near_account_id, public_key, signature, nonce, recipient }` |
+| `near/transfer` → 202, idem | `near.transfer` | `to`, `amount` (yoctoNEAR) | `StatusResponse` |
+| `near/call` → 202, idem | `near.call` lists `receiver_id` | `receiver_id`, `method_name`, `args?` \| `args_base64?`, `gas?`, `deposit?` | `StatusResponse` |
+| `evm/sign-typed-data` → 200 | domain in `evm.sign_typed_data` | `chain`, `typed_data` (EIP-712 v4) | `NativeSignature` |
+| `evm/sign-message` → 200 | `evm.sign_message` | `chain`, `message`, `encoding?` | `NativeSignature` |
+| `evm/sign-transaction` → 200 | `evm.sign_transaction` | `chain`, `unsigned_tx` (`0x` serialized) | `NativeSignature` |
+| `solana/sign-message` → 200 | `solana.sign_message` | `message`, `encoding?` (`utf8`/`hex`/`base64`) | `NativeSignature` |
+| `solana/sign-transaction` → 200 | `solana.sign_transaction` | `unsigned_tx` (base64 message) | `NativeSignature` |
+
+EVM `chain`: `ethereum`, `polygon`, `base`, `arbitrum`, `optimism`, `bsc`, `avalanche`,
+`hyperevm`, `hood` (one address on all). `NativeSignature = { correlation_id, chain, account_id,
+signature }` (EVM `0x` 65-byte r‖s‖v; Solana base58). Signing never broadcasts. A NEAR transfer or
+call reads `SUCCESS` once settled with `details.tx_hash`; a lost provider answer is resent under
+the same key for 10 minutes, then reads `NEEDS_REVIEW` (`native_request_unconfirmed`). Rules:
+[policy.md](policy.md#native-accounts-native).
 
 `dry: true` on swap/withdraw → 200 `{ dry: true, type, quote }`. A swap quote needs no grant and no
 idempotency key; a withdrawal preview needs both (same key replays it for 60 s; 20 per agent per

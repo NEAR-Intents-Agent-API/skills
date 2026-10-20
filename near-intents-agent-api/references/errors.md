@@ -44,14 +44,14 @@ Every error is a JSON:API document:
 | `policy_action_denied` | 403 | action (or confidential form) not in policy → owner `policy_update` |
 | `policy_destination_denied` | 403 | address not allowed → owner adds it to `destinations` |
 | `policy_schedule_denied` | 403 | outside the owner's `schedule` when it would run (after the timelock); nothing recorded → submit the same request at `meta.available_at`, or owner changes `schedule` |
-| `spend_budget_exceeded` | 403 | shared USD budget used up → wait for window (`usage.budget.*.resets_at`) or owner raises cap; retry with a **new** key |
+| `spend_budget_exceeded` | 403 | shared USD budget used up → wait for the window (`usage.budget.*.resets_at`, or `spend.budget` on a dry run: the time its oldest charge ages out) or owner raises cap; retry with a **new** key |
 | `policy_limit_exceeded` | 403 | the asset's hourly/daily/monthly limit would be passed (shield/unshield count too) → wait for the window or owner raises it; retry with a **new** key |
 | `policy_action_limit_exceeded` | 403 | `max_actions_per_hour` used up → wait for the hour or owner raises it; retry with a **new** key |
 | `policy_usage_unavailable` | 409 | earlier actions have no per-asset count and a limit applies; nothing sent → clears when they leave the window, or the operator reconciles them |
 | `policy_denied` | 409 | provider-side policy refused (asset, per-asset limit, hourly rate, …) → owner `policy_update` |
 | `wallet_frozen` | 409 | owner froze the account → only `agent_unfreeze` resumes |
 | `policy_not_ready` | 409 | latest policy not yet in force → wait for the policy intent to settle |
-| `native_method_denied` | 403 | the policy's `native` switch for this route is off, or the contract/domain is not listed → owner `policy_update` |
+| `native_method_denied` | 403 | the policy's `native` switch for this route is off, or the contract/domain is not listed, or the domain entry's `primary_types` omits the request's `primaryType` → owner `policy_update` |
 | `native_contract_forbidden` | 403 | native transfer to or call of `intents.near`/`intents.far`; never allowed |
 | `signing_policy_denied` | 403 | `near/sign-message` recipient not in `native.near.sign_message` |
 | `signing_recipient_forbidden` | 403 | `intents.near`/`intents.far` are never signing recipients |
@@ -60,7 +60,7 @@ Every error is a JSON:API document:
 | `insufficient_balance` | 409 | fund the account or lower amount |
 | `amount_too_low` | 400 | below route minimum → quote a larger amount |
 | `route_unavailable` | 400 | no route/liquidity now; nothing submitted → other pair or later, new key |
-| `quote_unavailable` | 503 | upstream quote got no answer; nothing submitted → retry shortly, new key; check `/v1/network` |
+| `quote_unavailable` | 503 | the quote service did not answer; nothing submitted → read `GET /v1/network` (`one_click`), retry with a new key once it reports ok |
 | `unsupported_chain`, `unsupported_token`, `invalid_address` | 400/409 | change chain/asset/address |
 | `wrapped_unsupported` | 400 | drop `wrapped`; it only applies to NEAR withdrawn to chain `near` |
 | `wallet_busy` | 409 | another money op on this wallet is running; nothing sent, refusal recorded (not retryable) → after it finishes, a **new** key |
@@ -106,6 +106,17 @@ Every error is a JSON:API document:
 | **Not found** | 404 | `agent_not_found`, `grant_not_found`, `intent_not_found`, `operation_not_found`, `status_not_found`, `approval_not_found` |
 | **Disabled** | | |
 | `transparency_log_disabled` | 501 | this deployment keeps no transparency log; operation proofs are unavailable |
+
+**Dry runs warn with the live codes.** The spending rules never refuse a swap quote or withdrawal
+preview (`dry: true`): it returns `200`. Each rule the live request would fail is a `warnings[]`
+entry whose `code` is the live code: `policy_schedule_denied` (with `available_at`),
+`spend_price_unavailable`, `spend_budget_exceeded`, `policy_limit_exceeded` or
+`policy_action_limit_exceeded`, with the same meaning and the same layer to change. Such a code in
+`warnings` means the live request will be refused with it: tell the user, reduce the amount, wait,
+or ask the owner to change the policy. A withdrawal preview uses one of the 20 daily preview attempts
+every time it reaches the provider, rule warning or not. An archived, deleted or frozen account gets
+no quote: a swap quote and a withdrawal preview are both refused with 409 `agent_archived`,
+`agent_deleted` or `wallet_frozen`, reach no provider and use no preview attempt.
 
 ## Retry rules
 

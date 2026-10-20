@@ -96,7 +96,7 @@ Details: [owner-intents.md](owner-intents.md), signing: [signing.md](signing.md)
 | `near/sign-message` → 200 | `near.sign_message` lists `recipient` | `message`, `encoding?` (`utf8`/`hex`), `recipient` | `{ correlation_id, near_account_id, public_key, signature, nonce, recipient }` |
 | `near/transfer` → 202, idem | `near.transfer` | `to`, `amount` (yoctoNEAR) | `StatusResponse` |
 | `near/call` → 202, idem | `near.call` lists `receiver_id` | `receiver_id`, `method_name`, `args?` \| `args_base64?`, `gas?`, `deposit?` | `StatusResponse` |
-| `evm/sign-typed-data` → 200 | domain in `evm.sign_typed_data` | `chain`, `typed_data` (EIP-712 v4) | `NativeSignature` |
+| `evm/sign-typed-data` → 200 | domain (and `primaryType`, if the entry lists `primary_types`) in `evm.sign_typed_data` | `chain`, `typed_data` (EIP-712 v4; `message` ≤ 65536 bytes as canonical JSON) | `NativeSignature` |
 | `evm/sign-message` → 200 | `evm.sign_message` | `chain`, `message`, `encoding?` | `NativeSignature` |
 | `evm/sign-transaction` → 200 | `evm.sign_transaction` | `chain`, `unsigned_tx` (`0x` serialized) | `NativeSignature` |
 | `solana/sign-message` → 200 | `solana.sign_message` | `message`, `encoding?` (`utf8`/`hex`/`base64`) | `NativeSignature` |
@@ -109,9 +109,16 @@ call reads `SUCCESS` once settled with `details.tx_hash`; a lost provider answer
 the same key for 10 minutes, then reads `NEEDS_REVIEW` (`native_request_unconfirmed`). Rules:
 [policy.md](policy.md#native-accounts-native).
 
-`dry: true` on swap/withdraw → 200 `{ dry: true, type, quote }`. A swap quote needs no grant and no
-idempotency key; a withdrawal preview needs both (same key replays it for 60 s; 20 per agent per
-rolling 24 h, failures included: `withdraw_preview_limit_reached`). Details: [executions.md](executions.md).
+`dry: true` on swap/withdraw → 200 `{ dry: true, type, quote, spend, fee, warnings }`. A swap quote
+needs no grant and no idempotency key; a withdrawal preview needs both (same key replays it for
+60 s; 20 per agent per rolling 24 h, failures included: `withdraw_preview_limit_reached`). The
+spending rules (schedule, USD budget, per-asset limits, `max_actions_per_hour`) never refuse either:
+each one the live request would fail is a `warnings[]` entry whose `code` is that request's error
+code (`policy_schedule_denied` also carries `available_at`). A preview that reaches the provider uses
+one of the 20 even when it carries such a warning. An archived, deleted or frozen account gets no
+quote: a swap quote and a withdrawal preview are both refused with 409 `agent_archived`,
+`agent_deleted` or `wallet_frozen`, reach no provider and use no attempt. A warning-free answer is
+a snapshot, not a reservation. Shape and details: [executions.md](executions.md).
 
 ## Core shapes
 
@@ -121,7 +128,8 @@ StatusResponse = {
   agent_id: string | null,
   type: "agent_create" | "policy_update" | "agent_freeze" | "agent_unfreeze" | "agent_archive"
       | "agent_restore" | "agent_delete" | "grant_issue" | "grant_revoke" | "execution_cancel"
-      | "approval_vote" | "swap" | "withdraw" | "transfer" | "shield" | "unshield" | "deposit",
+      | "approval_vote" | "swap" | "withdraw" | "transfer" | "shield" | "unshield" | "deposit"
+      | "native",
   status: "PENDING_SIGNATURE" | "QUEUED" | "PENDING_APPROVAL" | "PENDING_DEPOSIT" | "PROCESSING"
         | "SUCCESS" | "REFUNDED" | "FAILED" | "UNCERTAIN" | "NEEDS_REVIEW",
   failure_code: string | null,
@@ -131,6 +139,9 @@ StatusResponse = {
   details: { … by type … }
 }
 ```
+
+`PENDING_DEPOSIT` appears only for deposits. A withdrawal's or swap's bridge leg waiting on 1Click
+reads `PROCESSING`, with `details.provider_status` keeping the provider's own state.
 
 `details` by type:
 
@@ -144,6 +155,7 @@ StatusResponse = {
 | `execution_cancel` | `cancelled_correlation_id` |
 | `agent_archive`, `agent_restore` | `archived` |
 | `approval_vote` | `approval_id`, `verdict` |
+| `native` | `method`, `chain`, `account_id`, `target`, `amount`, `method_name`, `primary_type`, `domain`, `message_json`, `request_sha256`, `signature`, `tx_hash`, `provider_request_id`, `provider_status`, `failure_reason`. `domain` (the matched EIP-712 domain, in the policy's spelling) and `message_json` (the signed `message` as canonical JSON, keys sorted, a string) are set for typed data, `null` otherwise |
 
 Narrow on `type` before reading `details`.
 
@@ -165,7 +177,7 @@ PolicyView = {
   provider_policy_synced: boolean,         // in force only when APPLIED && true
   cooldowns, policy: Policy | null,
   usage: {
-    budget: { daily|weekly|monthly: { limit_usd, spent_usd, remaining_usd, resets_at } },
+    budget: { daily|weekly|monthly: { limit_usd, spent_usd, remaining_usd, resets_at } },  // rolling windows
     timelock: { delay_ms, scheduled_count }
   }
 }

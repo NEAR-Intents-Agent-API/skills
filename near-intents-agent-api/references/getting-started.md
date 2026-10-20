@@ -138,7 +138,7 @@ Idempotency-Key: dep_7f3c…
 { "origin_asset": "<asset_id on the chain the user pays from>" }
 ```
 
-Returns `PENDING_DEPOSIT` with `details.deposit_address`, `details.memo` (send it when present),
+Returns `PENDING_DEPOSIT` (only deposits report it) with `details.deposit_address`, `details.memo` (send it when present),
 `details.min_amount`, `details.expires_at`, `details.refund_to` (the agent account). Show those
 to the payer, then poll the `correlation_id` until `SUCCESS`. On NEAR you can also send NEP-141
 tokens straight to `GET /v1/agents/{agent_id}/addresses/near`.
@@ -153,9 +153,12 @@ Idempotency-Key: swap_9a1e…
 { "origin_asset": "nep141:wrap.near", "destination_asset": "<usdc>", "amount": "1000000000000000000000000", "dry": true }
 ```
 
-`dry: true` returns `{dry: true, type: "swap", quote}` and nothing else (no key, no grant needed).
-Drop `dry` to execute: you get `202` with a `StatusResponse` (`op_…`). Poll it to a terminal
-status. See [executions.md](executions.md) and [status-and-recovery.md](status-and-recovery.md).
+`dry: true` returns `{dry: true, type: "swap", quote, spend, fee, warnings}` (no key, no grant needed).
+The spending rules never refuse it. `spend` shows what the budget would count and what is left, `fee`
+the share the route keeps, `warnings` any `high_fee` plus each rule the live swap would fail
+(schedule, USD budget, limits) under the code the live swap would get. A frozen, archived or deleted
+account gets no quote: `wallet_frozen`, `agent_archived` or `agent_deleted`. Drop `dry` to execute:
+you get `202` with a `StatusResponse` (`op_…`). Poll it to a terminal status. See [executions.md](executions.md) and [status-and-recovery.md](status-and-recovery.md).
 
 ## 8. Before going live
 

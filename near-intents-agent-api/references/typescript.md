@@ -70,7 +70,11 @@ const agent = api.forGrant(token);                         // one client per gra
 ```ts
 const quote = await agent.swap(agentId, {
   origin_asset: "nep141:wrap.near", destination_asset: usdc, amount: "1000000000000000000000000", dry: true,
-});                                                          // QuoteResponse, no key
+});                                                          // QuoteResponse, no key: { dry, type, quote, spend, fee, warnings }
+// Never refused by the spending rules: quote.warnings lists each one the live swap would fail under its
+// code (spend_budget_exceeded, policy_schedule_denied + available_at, …). Check it before the real swap.
+// A frozen, archived or deleted account gets no quote: it throws wallet_frozen, agent_archived or agent_deleted.
+// withdraw(…, { dry: true }) is the same shape but needs the grant and a key, and uses one of 20 daily attempts.
 
 const idempotencyKey = createIdempotencyKey();               // persist with the body first
 const op = await agent.swap(agentId, { origin_asset: "nep141:wrap.near", destination_asset: usdc, amount }, { idempotencyKey });
@@ -100,7 +104,8 @@ With a grant, and only for methods the policy's `native` block switches on
 const proof = await agent.nativeNearSignMessage(agentId, { message: canonicalChallengeJson, recipient: "login.example.near" });
 // { correlation_id, near_account_id, public_key, signature (hex), nonce (base64), recipient }
 
-// EIP-712 under a domain listed in native.evm.sign_typed_data
+// EIP-712 under a domain listed in native.evm.sign_typed_data (and a primaryType the entry's
+// primary_types allows, when it sets them; otherwise 403 native_method_denied)
 const { signature } = await agent.nativeEvmSignTypedData(agentId, { chain: "arbitrum", typed_data });
 
 // Native NEAR from near_account_id (native.near.transfer); idempotent like any execution
@@ -140,7 +145,7 @@ try {
   if (error instanceof AgentApiError) {
     switch (error.code) {
       case "policy_destination_denied": /* ask owner to allow the address */ break;
-      case "spend_budget_exceeded":     /* show remaining budget */ break;
+      case "spend_budget_exceeded":     /* show remaining budget (a dry quote or preview warns with this code) */ break;
       case "policy_schedule_denied":    /* outside owner hours: same request at error.availableAt */ break;
       case "policy_change_throttled":   /* error.availableAt */ break;
       default: throw error;

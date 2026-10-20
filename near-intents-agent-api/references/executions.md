@@ -19,16 +19,57 @@ All are `POST /v1/agents/{agent_id}/<action>` and return `202` with a `StatusRes
 ```json
 POST …/swap      { "origin_asset": "nep141:wrap.near", "destination_asset": "<usdc>", "amount": "1000000000000000000000000", "dry": true }
 POST …/withdraw  { "asset": "<usdc>", "amount": "5000000", "chain": "base", "recipient": "0xabc…", "dry": true }
-→ 200 { "dry": true, "type": "swap", "quote": { …1Click quote, snake_cased… } }
+→ 200 { "dry": true, "type": "swap" | "withdraw", "quote": { …1Click quote, snake_cased… },
+        "spend": { "amount_usd": string | null, "budget": { "daily": {…}, "weekly": {…}, "monthly": {…} } },
+        "fee": { "amount_usd": string, "percent": string } | null,
+        "warnings": [ { "code": "high_fee" | "asset_delivered_as_is"
+                              | "policy_schedule_denied" | "spend_price_unavailable"
+                              | "spend_budget_exceeded" | "policy_limit_exceeded" | "policy_action_limit_exceeded",
+                        "detail": string, "available_at"?: string } ] }
 ```
 
-Dry runs charge no budget and move nothing. A swap quote needs no grant and no idempotency key. A
-withdrawal preview needs the grant and an `Idempotency-Key`: the same key replays an identical
-preview for 60 s, an expired one needs a new key, and each agent gets 20 previews per rolling 24 h,
-failed ones included (`withdraw_preview_limit_reached`). The `quote`
+Dry runs charge no budget, reserve none and move nothing. A swap quote needs no grant and no
+idempotency key. A withdrawal preview needs the grant and an `Idempotency-Key`: the same key replays
+an identical preview for 60 s, an expired one needs a new key, and each agent gets 20 previews per
+rolling 24 h. Every preview that reaches the provider uses one, failed ones and ones carrying a rule
+warning included (`withdraw_preview_limit_reached`). The `quote`
 object belongs to 1Click (amount out, fees, time estimate); treat its fields as informational
 and do not hard-code its shape. Use it to show the user expected output and to choose
 `min_amount_out` (slippage floor).
+
+**Dry runs report the spending rules, they are not refused by them.** A quote or preview on a usable
+account always goes to 1Click and returns `200`. It also checks the spending rules the live request
+would face: the schedule at the time the request would run (after `timelock_ms`), the USD budget,
+then per-asset limits and `max_actions_per_hour`. Each one it would fail is a `warnings` entry whose
+`code` is the code the live request would get (`policy_schedule_denied`, `spend_price_unavailable`,
+`spend_budget_exceeded`, `policy_limit_exceeded`, `policy_action_limit_exceeded`); the schedule
+warning also carries `available_at`, when the schedule next allows it. Only the live request is
+refused with these codes.
+
+An archived, deleted or frozen account gets no quote: an account that can do nothing has no use for
+one. A swap quote and a withdrawal preview are both refused with 409 `agent_archived`,
+`agent_deleted` or `wallet_frozen`, the code the live request gets. The refusal reaches no provider
+and uses no preview attempt.
+
+Before executing, read `warnings`. A spending-rule code there means the live request will be refused
+with that code: tell the user, reduce the amount, wait (`spend.budget.*.resets_at`, `available_at`),
+or ask the owner to change the policy (see [errors.md](errors.md)). A quote without such a warning
+is not a guarantee: it is a snapshot, other work can use the budget first, and a timelocked request
+is charged at dispatch.
+
+What the rest of the answer holds:
+
+- `spend.amount_usd`: what the budget would count for this request; `null` when it is uncounted or
+  unpriced.
+- `spend.budget`: `{ daily, weekly, monthly }`, each `{ limit_usd, spent_usd, remaining_usd,
+  resets_at }` as `usage.budget` on `GET …/policy`, before this request.
+- `fee`: `{ amount_usd, percent }` or `null`. A swap compares the input's value with the quoted
+  output's value at current prices. A withdrawal values the provider's `estimated_fee` only when its
+  `fee_token` is the withdrawn asset (or the fee is zero); otherwise `null`.
+- `warnings`: `high_fee` when the route keeps more than 5%; `asset_delivered_as_is` when a
+  non-USDC asset is withdrawn to chain `hypercore`: it lands in HyperCore spot as that asset, not as
+  USDC perps margin. Swap to USDC first to fund perps. Any spending-rule code (above) means the live
+  request would be refused with it. Show `detail` to the user.
 
 ## Execute
 
@@ -60,7 +101,8 @@ the client a ~150 s timeout. `withdraw` with `async: true` returns as soon as it
   below it.
 - `amount_too_low`: below the route minimum (confidential swaps have their own minimum).
 - `route_unavailable` / `quote_unavailable`: nothing was submitted; retry later with a **new**
-  idempotency key or pick another pair.
+  idempotency key or pick another pair. For `quote_unavailable` (the quote service did not answer),
+  read `GET /v1/network`: retry once `one_click` reports ok.
 
 ## Withdraw
 
@@ -72,6 +114,11 @@ the client a ~150 s timeout. `withdraw` with `async: true` returns as soon as it
   expect. `wrapped: true` delivers wNEAR instead; only for that route (`wrapped_unsupported`).
 - `unsupported_chain` means a chain the catalog doesn't list; `route_unavailable` means no
   liquidity for that asset now; `invalid_address` when the provider rejects the address format.
+- Moving funds to your own account on another chain or venue (your Hyperliquid or Polymarket
+  address, say) counts against the USD budget like any withdrawal, and a deposit back does not
+  credit it.
+- A non-USDC asset withdrawn to chain `hypercore` lands in HyperCore spot as that asset, not as USDC
+  perps margin (the preview warns `asset_delivered_as_is`). Swap to USDC first to fund perps.
 - `details.destination_tx_hash` appears once the destination chain confirms.
 
 ## Transfer
@@ -114,7 +161,8 @@ Idempotency-Key: dep:user123:<uuid>
   `details.refund_to` reports where.
 - Response `PENDING_DEPOSIT` with `details.deposit_address` (send funds **only** there),
   `details.memo` (include it if present), `details.min_amount`, `details.expires_at`.
-- Then poll the `op_…` id: `PENDING_DEPOSIT` → `PROCESSING` → `SUCCESS`.
+- Then poll the `op_…` id: `PENDING_DEPOSIT` → `PROCESSING` → `SUCCESS`. Only deposits report
+  `PENDING_DEPOSIT`.
 - Without `amount` an address stays open 3 days; with it, 24 h. Each lookup issues a new address.
 - Quota: 100 deposit addresses per agent per rolling 24 h → `deposit_quota_exceeded` (429).
 - Native NEAR-side funding: `GET …/addresses/near` returns the account; send NEP-141 tokens to it.
@@ -133,7 +181,9 @@ Only for `UNCERTAIN` operations that provably never reached the provider (no
 
 1. `GET …/policy` in force? action allowed? destination listed? budget `remaining_usd` enough?
 2. Balance enough? (`GET …/balances`)
-3. Dry quote (swap/withdraw) and show it.
+3. Dry quote (swap/withdraw) and show it, with `fee` and `warnings`. A spending-rule code in
+   `warnings` means the live call would be refused with it: stop or adjust before sending. A refused
+   quote (`wallet_frozen`, `agent_archived`, `agent_deleted`) means the account can do nothing.
 4. Create + persist the idempotency key and body, then send.
 5. Poll to a stable status, report `SUCCESS`/`REFUNDED`/`FAILED` with hashes; for `UNCERTAIN`
    say "outcome pending" and keep observing.

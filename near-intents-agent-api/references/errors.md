@@ -108,7 +108,7 @@ Every error is a JSON:API document:
 
 **Dry runs warn with the live codes.** The spending rules never refuse a swap quote or withdrawal
 preview (`dry: true`): it returns `200`. Each rule the live request would fail is a `warnings[]`
-entry whose `code` is the live code: `policy_schedule_denied` (with `available_at`),
+entry whose `code` is the live code: `policy_asset_denied`, `policy_schedule_denied` (with `available_at`),
 `spend_price_unavailable`, `spend_budget_exceeded`, `policy_limit_exceeded` or
 `policy_action_limit_exceeded`, with the same meaning and the same layer to change. Such a code in
 `warnings` means the live request will be refused with it: tell the user, reduce the amount, wait,

@@ -23,7 +23,7 @@ POST …/withdraw  { "asset": "<usdc>", "amount": "5000000", "chain": "base", "r
         "spend": { "amount_usd": string | null, "budget": { "daily": {…}, "weekly": {…}, "monthly": {…} } },
         "fee": { "amount_usd": string, "percent": string } | null,
         "warnings": [ { "code": "high_fee" | "asset_delivered_as_is"
-                              | "policy_schedule_denied" | "spend_price_unavailable"
+                              | "policy_asset_denied" | "policy_schedule_denied" | "spend_price_unavailable"
                               | "spend_budget_exceeded" | "policy_limit_exceeded" | "policy_action_limit_exceeded",
                         "detail": string, "available_at"?: string } ] }
 ```
@@ -39,9 +39,9 @@ and do not hard-code its shape. Use it to show the user expected output and to c
 
 **Dry runs report the spending rules, they are not refused by them.** A quote or preview on a usable
 account always goes to 1Click and returns `200`. It also checks the spending rules the live request
-would face: the schedule at the time the request would run (after `timelock_ms`), the USD budget,
+would face: the policy's `assets`, the schedule at the time the request would run (after `timelock_ms`), the USD budget,
 then per-asset limits and `max_actions_per_hour`. Each one it would fail is a `warnings` entry whose
-`code` is the code the live request would get (`policy_schedule_denied`, `spend_price_unavailable`,
+`code` is the code the live request would get (`policy_asset_denied`, `policy_schedule_denied`, `spend_price_unavailable`,
 `spend_budget_exceeded`, `policy_limit_exceeded`, `policy_action_limit_exceeded`); the schedule
 warning also carries `available_at`, when the schedule next allows it. Only the live request is
 refused with these codes.

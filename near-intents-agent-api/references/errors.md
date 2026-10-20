@@ -55,7 +55,6 @@ Every error is a JSON:API document:
 | `native_contract_forbidden` | 403 | native transfer to or call of `intents.near`/`intents.far`; never allowed |
 | `signing_policy_denied` | 403 | `near/sign-message` recipient not in `native.near.sign_message` |
 | `signing_recipient_forbidden` | 403 | `intents.near`/`intents.far` are never signing recipients |
-| `signing_identity_challenge_invalid` | 400 | `near/sign-message` body is not a canonical identity challenge for `recipient` |
 | **Execution / routing** | | |
 | `insufficient_balance` | 409 | fund the account or lower amount |
 | `amount_too_low` | 400 | below route minimum → quote a larger amount |

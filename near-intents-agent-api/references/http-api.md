@@ -93,7 +93,7 @@ Details: [owner-intents.md](owner-intents.md), signing: [signing.md](signing.md)
 
 | Path | Policy switch | Body | Reply |
 |---|---|---|---|
-| `near/sign-message` → 200 | `near.sign_message` lists `recipient` | `message`, `encoding?` (`utf8`/`hex`), `recipient` | `{ correlation_id, near_account_id, public_key, signature, nonce, recipient }` |
+| `near/sign-message` → 200 | `near.sign_message` lists `recipient` | `message`, `encoding?` (`utf8`/`hex`), `recipient`, `nonce` (32 bytes, base64) | `{ correlation_id, near_account_id, public_key, signature (base64), nonce, recipient }` |
 | `near/transfer` → 202, idem | `near.transfer` | `to`, `amount` (yoctoNEAR) | `StatusResponse` |
 | `near/call` → 202, idem | `near.call` lists `receiver_id` | `receiver_id`, `method_name`, `args?` \| `args_base64?`, `gas?`, `deposit?` | `StatusResponse` |
 | `evm/sign-typed-data` → 200 | domain (and `primaryType`, if the entry lists `primary_types`) in `evm.sign_typed_data` | `chain`, `typed_data` (EIP-712 v4; `message` ≤ 65536 bytes as canonical JSON) | `NativeSignature` |

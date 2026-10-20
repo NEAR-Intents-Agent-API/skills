@@ -64,11 +64,11 @@ grant of that conversation.
 | `get_balances` | `GET …/balances` (public + confidential) | format with `decimals` |
 | `get_rules` | `GET …/policy` | summarize actions, destinations, budget remaining, timelock, schedule |
 | `list_tokens` | `GET /v1/tokens` | cache; resolve symbols → `asset_id` |
-| `quote_swap` / `quote_withdraw` | `dry: true` | always before executing |
+| `quote_swap` / `quote_withdraw` | `dry: true` | always before executing; show `fee` and `warnings`; a spending-rule code in `warnings` means the live call would be refused with it; a frozen, archived or deleted account gets no quote |
 | `swap` / `transfer` / `withdraw` | executions | server creates the idempotency key; require explicit user confirmation for amounts above a threshold |
 | `deposit_address` | `POST …/deposit` | show address, memo, min amount, expiry |
 | `check_operation` | `GET /v1/status` | returns status + hashes |
-| `network_status` | `GET /v1/network` | when a route/quote fails |
+| `network_status` | `GET /v1/network` | when a route/quote fails (`quote_unavailable`: retry once `one_click` is ok) |
 
 Do **not** give the model tools for owner intents (policy changes, grants, freeze, delete); those
 belong to the owner's UI with a wallet signature. If the model is asked to "raise my limit",
@@ -90,7 +90,7 @@ holds the grant token in its environment; one grant per MCP client installation.
 - [ ] Owner sees `preview.summary` + full policy before signing; deletes show `assets_lost`.
 - [ ] Default policy is tight: explicit assets, per-transaction limits, `destinations: only`,
       USD budget, and a timelock or owner approval for payouts.
-- [ ] Idempotency keys persisted before sending; no new key for `UNCERTAIN`.
+- [ ] Idempotency keys persisted before sending; no new key for `UNCERTAIN` (outcome not yet proven).
 - [ ] `NEEDS_REVIEW` alerts a human.
 - [ ] Mainnet writes behind explicit configuration flags in dev tooling.
 - [ ] Logs carry `request_id` and `correlation_id`, never secrets or signatures.

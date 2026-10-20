@@ -31,9 +31,10 @@ Native = {                                                // when present, every
   solana: { sign_message: boolean, sign_transaction: boolean },
 }
 
-EvmTypedDataDomain = {                                    // ≥1 field, 0–64 unique entries
+EvmTypedDataDomain = {                                    // ≥1 domain field, 0–64 entries unique by domain
   name?: string, version?: string, chain_id?: number | string,
   verifying_contract?: string, salt?: string,             // lowercase 0x
+  primary_types?: string[],                               // 1–32 unique message types; omit = any type
 }
 
 Destination =
@@ -72,7 +73,12 @@ Unknown fields are rejected (strict objects). Field names are snake_case.
 `budget` notes: charged atomically at dispatch using 1Click USD prices; an asset with no fresh
 price fails with `spend_price_unavailable` (only while a budget is set). A larger budget never
 lifts a per-asset limit; both must pass. Live usage is in `GET …/policy` →
-`usage.budget.{daily,weekly,monthly}.{limit_usd, spent_usd, remaining_usd, resets_at}`.
+`usage.budget.{daily,weekly,monthly}.{limit_usd, spent_usd, remaining_usd, resets_at}`. The windows
+are rolling: `resets_at` is when a window's oldest charge ages out, not a daily reset. Moving funds
+to your own account on another chain or venue (your Hyperliquid or Polymarket address) counts like
+any withdrawal, and a deposit back does not credit it. Swap quotes and withdrawal previews
+(`dry: true`) charge nothing: they report the budget as `spend.budget` and warn with
+`spend_budget_exceeded` when the live request would be refused.
 
 `limits` notes: the API also counts hourly/daily/monthly limits and `max_actions_per_hour` per
 agent, shared by every grant, at dispatch. Swaps, withdrawals, transfers, **shield and unshield**
@@ -80,6 +86,7 @@ all count; `near` and `nep141:wrap.near` share one count. Pending/uncertain acti
 settled; a completed one counts for the full window after completion; removing a limit keeps the
 usage. Over → `policy_limit_exceeded` / `policy_action_limit_exceeded` (403); earlier actions
 without a count → `policy_usage_unavailable` (409). Remaining per-asset allowance is not readable.
+Dry-run quotes and previews are not refused for these; they carry the same codes in `warnings`.
 
 `destinations` notes:
 - `only` + `[]` (the safe default) keeps funds inside the account: swaps only.
@@ -112,7 +119,7 @@ Omit it and every native method is off. A policy update replaces the whole polic
 | `near.sign_message: ["login.example.near"]` | `near/sign-message` | NEP-413 identity challenge for a listed service, so the agent proves it controls `near_account_id` |
 | `near.transfer: true` | `near/transfer` (Idempotency-Key) | native NEAR from `near_account_id` to any account |
 | `near.call: ["app.example.near"]` | `near/call` (Idempotency-Key) | a function call on a listed contract |
-| `evm.sign_typed_data: [domain, …]` | `evm/sign-typed-data` | EIP-712 v4 under a listed domain only |
+| `evm.sign_typed_data: [domain, …]` | `evm/sign-typed-data` | EIP-712 v4 under a listed domain only, and only the entry's `primary_types` if it lists them |
 | `evm.sign_message: true` | `evm/sign-message` | EIP-191 message |
 | `evm.sign_transaction: true` | `evm/sign-transaction` | any EVM transaction |
 | `solana.sign_message` / `solana.sign_transaction` | `solana/sign-message` / `solana/sign-transaction` | Solana message / transaction |
@@ -127,6 +134,21 @@ Omit it and every native method is off. A policy update replaces the whole polic
   `types.EIP712Domain` may be omitted (derived); when sent it declares exactly those fields in
   EIP-712 order with standard types. `primaryType: "EIP712Domain"` is refused. Hyperliquid's
   `Exchange` domain (trading) never signs a `HyperliquidSignTransaction` withdrawal.
+- **`primary_types`** narrows the message types signed under an entry's domain: 1 to 32 unique
+  strings, each 1–256 chars, case-sensitive, never `EIP712Domain`; an empty list is invalid. Omitted
+  = any message type under the domain. A request matches when its domain equals the entry's domain
+  field for field **and** (no `primary_types` or its `primaryType` is listed); otherwise
+  `403 native_method_denied`. Entries are unique by domain: one domain listed twice with different
+  types is refused, so give one entry all its types.
+  ```json
+  { "name": "HyperliquidSignTransaction", "version": "1", "chain_id": 42161,
+    "verifying_contract": "0x0000000000000000000000000000000000000000",
+    "primary_types": ["HyperliquidTransaction:Withdraw"] }
+  ```
+  Under that domain Hyperliquid also signs `HyperliquidTransaction:SpotSend` and
+  `HyperliquidTransaction:UsdSend`, which pay any address. `primary_types` narrows the **kind** of
+  message, never its fields: an allowed `HyperliquidTransaction:Withdraw` can still name any
+  destination and amount.
 - **Identity challenge:** `near/sign-message` signs only the canonical
   `near-intents-agent-api.identity.v1` challenge (exact fields `domain, purpose, chain, audience,
   challenge, issued_at_ms, expires_at_ms`; `audience` = `recipient`; lives ≤ 5 minutes). Never a
@@ -138,6 +160,10 @@ Omit it and every native method is off. A policy update replaces the whole polic
   allow `nep141:wrap.near` (or `any`) and stays within its `limits`.
 - Signing routes return the signature and never broadcast. NEAR transfer and call are sent by the
   wallet provider and read like any execution (`GET /v1/status`, type `native`).
+- A typed-data record (status and history, type `native`) also holds `details.domain` (the matched
+  EIP-712 domain, in the policy's spelling) and `details.message_json` (the signed `message` as
+  canonical JSON, keys sorted, a string); both are `null` for other native methods. A typed-data
+  `message` over 65536 bytes as canonical JSON is refused with `validation_failed`.
 - Freezing the account stops every native route. Changing `native` is an on-chain policy update.
 - Addresses: `wallet.near_account_id`, `wallet.evm_account_id` (same on every EVM chain) and
   `wallet.solana_account_id`; the last two are null until the provider reports them.

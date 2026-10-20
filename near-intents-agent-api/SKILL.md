@@ -33,7 +33,7 @@ Follow these in every integration; most bugs and lost-fund incidents come from b
    and `asset_id` from `GET /v1/tokens`. Never use floats.
 4. **Every money-moving call carries an `Idempotency-Key`** (8–128 chars `[A-Za-z0-9._:-]`).
    Create it, persist it with the request, *then* send. Retry only with the same key and body.
-5. **`UNCERTAIN` means "maybe executed".** Keep polling the original `correlation_id`. Never
+5. **`UNCERTAIN` means the outcome is not yet proven ("maybe executed").** Keep polling the original `correlation_id`. Never
    resubmit with a new key; `/recover` is only for provably-undispatched operations. An
    execution the provider may have received answers `202 UNCERTAIN`. A server failure
    (`internal_error`, `database_busy`, `transaction_unconfirmed`) carries `meta.retryable` and
@@ -85,7 +85,11 @@ owner signs ──► agent_create (policy) ──► grant_issue (token commitm
    optional `memo`, and `refund_to` (the agent's own balance).
 4. **Act** — `POST /v1/agents/{agent_id}/swap|transfer|withdraw|shield|unshield` with
    `X-API-Key`, `X-Grant-Token`, `Idempotency-Key`. Quote first with `dry: true`: a swap quote needs only `X-API-Key`; a withdrawal preview needs
-   the grant and a key, like the withdrawal (20 per agent per rolling 24 h).
+   the grant and a key, like the withdrawal (20 per agent per rolling 24 h). The spending rules
+   (schedule, USD budget, limits) never refuse a quote: it returns `spend`, `fee` and `warnings`, and
+   each rule the live call would fail is a warning under that call's error code. Read `warnings`
+   before executing. An archived, deleted or frozen account gets no quote: it is refused with the
+   code the live request gets (`agent_archived`, `agent_deleted`, `wallet_frozen`).
 5. **Observe** — `GET /v1/status?correlation_id=…&wait_ms=30000` until it stops moving.
 
 Every owner action (policy edits, freeze, grant revoke, approval votes, cancel, delete) is the
@@ -125,7 +129,8 @@ The Python and Rust signers are verified byte-for-byte against near-api-js and v
   unless the user runs a self-hosted or local deployment (then only the base URL changes).
 - Show `preview.summary` (and `preview.policy` / `preview.deletion`) to the owner before signing.
 - Read `GET /v1/network` before acting and after `quote_unavailable`, `route_unavailable` or
-  `provider_unavailable`; if a component is `down`, wait rather than change the request.
+  `provider_unavailable`; if a component is `down`, wait rather than change the request. After
+  `quote_unavailable`, retry with a new Idempotency-Key once `one_click` reports ok.
 - Writes against mainnet move real money: build in dry-run/quote mode first and gate live
   execution behind an explicit flag, as the examples do (`AGENT_ALLOW_WRITES`, `AGENT_EXECUTE`).
 - Do not invent endpoints or fields. If unsure, fetch `/openapi.json` or `/llms.txt` from the

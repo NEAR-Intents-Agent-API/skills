@@ -7,16 +7,21 @@
 | `PENDING_SIGNATURE` | owner intent generated, not yet signed | get the signature or let it expire |
 | `QUEUED` | held by the policy timelock until `details.execute_after` | wait; owner may `execution_cancel` |
 | `PENDING_APPROVAL` | waiting for the owner's `approval_vote` (`details.approval_id`) | ask the owner; poll slowly |
-| `PENDING_DEPOSIT` | deposit address issued, waiting for funds | show `deposit_address`; poll until `expires_at` |
-| `PROCESSING` | submitted, settlement not yet observed | keep polling |
+| `PENDING_DEPOSIT` | deposit address issued, waiting for the payer's funds. **Only deposits report it** | show `deposit_address`; poll until `expires_at` |
+| `PROCESSING` | submitted, settlement not yet observed. Includes a withdrawal's or swap's bridge leg waiting on 1Click (`details.provider_status` keeps the provider's own state) and a provider `success` whose settlement it still reports pending | keep polling |
 | `SUCCESS` | settled with evidence | done |
 | `REFUNDED` | route refunded the input (`refund_tx_hash`) | done; tell the user |
 | `FAILED` | never executed, or failed with `failure_code` | done; new request needs a new key |
-| `UNCERTAIN` | outcome unknown, **may have executed** | keep polling the same id; never resubmit under a new key |
+| `UNCERTAIN` | outcome not yet proven, **may have executed** | keep polling the same id; never resubmit under a new key |
 | `NEEDS_REVIEW` | automatic settlement stopped | stop; inspect `details.reason`; then `refresh=true` |
 
 Terminal: `SUCCESS`, `REFUNDED`, `FAILED`. `UNCERTAIN` usually resolves on its own as the API
 reconciles with the provider.
+
+A withdrawal is never `PENDING_DEPOSIT`: while its bridge leg waits on 1Click it reads `PROCESSING`.
+A provider `success` with settlement still pending also reads `PROCESSING`, up to the settlement
+deadline; past it the operation reads `UNCERTAIN` with `failure_code: settlement_overdue`. Keep
+polling the same `correlation_id`.
 
 ## Polling
 

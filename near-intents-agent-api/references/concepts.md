@@ -41,7 +41,7 @@ layer can lift it:
 | `wallet_frozen` | policy `frozen` | owner `agent_unfreeze` |
 | `policy_action_denied` | policy `actions` / `confidential` | owner `policy_update` |
 | `policy_destination_denied` | policy `destinations` | owner `policy_update` |
-| `spend_budget_exceeded` | policy `budget` (USD, shared) | owner raises cap, or wait for the window |
+| `spend_budget_exceeded` | policy `budget` (USD, shared, rolling windows) | owner raises cap, or wait until `resets_at` (when the window's oldest charge ages out) |
 | `policy_limit_exceeded`, `policy_action_limit_exceeded` | policy `limits` (hourly/daily/monthly) / `max_actions_per_hour`, counted by the API | owner raises the limit, or wait for the window |
 | `policy_usage_unavailable` | earlier actions the API has no per-asset count for | wait until they leave the window, or the operator reconciles them |
 | `policy_schedule_denied` | policy `schedule` (owner's weekly hours) | submit again at `meta.available_at`, or owner changes `schedule` |
@@ -49,6 +49,13 @@ layer can lift it:
 | `policy_not_ready` | latest policy not yet in force | wait for the pending policy intent |
 
 A bigger USD budget never lifts a per-asset limit and a new grant never lifts a policy rule.
+
+`dry: true` swap quotes and withdrawal previews are never refused by the schedule, the USD budget,
+per-asset limits or `max_actions_per_hour`. Each one the live request would fail comes back in
+`warnings` under the code that request would get; only the live request is refused. A warning-free
+answer is a snapshot, not a guarantee: other work can use the budget first. A frozen account gets no
+quote: it is refused with `wallet_frozen`, as an archived or deleted one is with `agent_archived` or
+`agent_deleted`.
 
 ## Who enforces what
 
@@ -87,7 +94,8 @@ Both return a `correlation_id`; `GET /v1/status?correlation_id=` reads either.
    set and the request goes to the provider.
    From here, revoking the grant/key or freezing does **not** stop this operation.
 4. **Settle** — `PROCESSING` → `SUCCESS` | `REFUNDED` | `FAILED`, or `UNCERTAIN` /
-   `NEEDS_REVIEW` when the outcome cannot be proven.
+   `NEEDS_REVIEW` when the outcome cannot be proven. A bridge leg waiting on 1Click is still
+   `PROCESSING`; `PENDING_DEPOSIT` is only for deposits.
 
 ## Owners
 
@@ -116,7 +124,10 @@ with `approval_vote`; EVM and passkey votes are confirmed by the owner's `0s` wa
   NEAR. Deposits never need a grant and are always allowed.
 - **Withdrawals** leave NEAR Intents to an external chain address. **Transfers** go to another
   NEAR Intents account (no bridge).
-- Swaps and withdrawals route through 1Click; `dry: true` returns its quote.
+- Swaps and withdrawals route through 1Click; `dry: true` returns its quote with `spend`, `fee` and
+  `warnings`, which lists any spending rule the live request would fail.
+- The USD budget is rolling, and moving funds to your own account on another chain or venue (your
+  Hyperliquid or Polymarket address) counts like any withdrawal; a deposit back does not credit it.
 
 ## Lifecycle states
 

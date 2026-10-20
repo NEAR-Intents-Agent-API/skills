@@ -55,7 +55,6 @@ Every error is a JSON:API document:
 | `native_contract_forbidden` | 403 | native transfer to or call of `intents.near`/`intents.far`; never allowed |
 | `signing_policy_denied` | 403 | `near/sign-message` recipient not in `native.near.sign_message` |
 | `signing_recipient_forbidden` | 403 | `intents.near`/`intents.far` are never signing recipients |
-| `signing_identity_challenge_invalid` | 400 | `near/sign-message` body is not a canonical identity challenge for `recipient` |
 | **Execution / routing** | | |
 | `insufficient_balance` | 409 | fund the account or lower amount |
 | `amount_too_low` | 400 | below route minimum → quote a larger amount |
@@ -109,7 +108,7 @@ Every error is a JSON:API document:
 
 **Dry runs warn with the live codes.** The spending rules never refuse a swap quote or withdrawal
 preview (`dry: true`): it returns `200`. Each rule the live request would fail is a `warnings[]`
-entry whose `code` is the live code: `policy_schedule_denied` (with `available_at`),
+entry whose `code` is the live code: `policy_asset_denied`, `policy_schedule_denied` (with `available_at`),
 `spend_price_unavailable`, `spend_budget_exceeded`, `policy_limit_exceeded` or
 `policy_action_limit_exceeded`, with the same meaning and the same layer to change. Such a code in
 `warnings` means the live request will be refused with it: tell the user, reduce the amount, wait,

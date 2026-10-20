@@ -100,9 +100,9 @@ With a grant, and only for methods the policy's `native` block switches on
 ([policy.md](policy.md#native-accounts-native)):
 
 ```ts
-// NEP-413 identity challenge for a service listed in native.near.sign_message
-const proof = await agent.nativeNearSignMessage(agentId, { message: canonicalChallengeJson, recipient: "login.example.near" });
-// { correlation_id, near_account_id, public_key, signature (hex), nonce (base64), recipient }
+// NEP-413 login for a recipient listed in native.near.sign_message; message and nonce come from the service
+const proof = await agent.nativeNearSignMessage(agentId, { message, recipient: "app.example.com", nonce /* 32 bytes, base64 */ });
+// { correlation_id, near_account_id, public_key, signature (base64), nonce (echo), recipient }
 
 // EIP-712 under a domain listed in native.evm.sign_typed_data (and a primaryType the entry's
 // primary_types allows, when it sets them; otherwise 403 native_method_denied)
@@ -114,8 +114,9 @@ const sent = await agent.nativeNearTransfer(agentId, { to: "bob.near", amount: "
 
 Also `nativeNearCall`, `nativeEvmSignMessage`, `nativeEvmSignTransaction`,
 `nativeSolanaSignMessage`, `nativeSolanaSignTransaction`. Signing methods return the signature and
-never broadcast. For identity, the relying party verifies the NEP-413 signature over `message`,
-`nonce` and `recipient`, and that `public_key` is a full-access key of `near_account_id`.
+never broadcast. For logins, the relying party verifies the NEP-413 signature over `message`,
+`nonce` and `recipient`, checks the nonce is the one it issued, and that `public_key` is a
+full-access key of `near_account_id`.
 
 ## Operation proofs
 

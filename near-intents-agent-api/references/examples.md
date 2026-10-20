@@ -40,7 +40,7 @@ dedicated low-value owner account.
 | `06:archive-and-delete` | `06-policy-and-lifecycle/03-archive-and-delete.ts` | archive, restore, delete preview |
 | `06:schedule` | `06-policy-and-lifecycle/04-schedule.ts` | weekly hours, `policy_schedule_denied` |
 | `07:enable-native` | `07-native-accounts/01-enable-native.ts` | owner switches on `native.near.sign_message` (and with `evm` a typed-data domain), on chain |
-| `07:sign-and-verify` | `07-native-accounts/02-sign-and-verify.ts` | challenge → `nativeNearSignMessage` → relying-party verification |
+| `07:sign-and-verify` | `07-native-accounts/02-sign-and-verify.ts` | login request → `nativeNearSignMessage` → relying-party verification |
 | `07:evm-typed-data` | `07-native-accounts/03-evm-typed-data.ts` | EIP-712 under a listed domain, signer recovered; another domain refused |
 | `07:refusals` | `07-native-accounts/04-refusals.ts` | every native refusal, incl. `intents.near`/`intents.far` |
 | `07:disable-native` | `07-native-accounts/05-disable-native.ts` | remove one service or omit `native` entirely |
@@ -59,7 +59,7 @@ Useful support modules to copy: `support/sign-near-intent.ts` (server-side NEAR 
 NEP-413 + NEP-366), `support/evm-owner.ts` (EVM owner descriptor + EIP-712),
 `support/policy.ts` (policy builders), `support/destinations.ts`, `support/flow.ts`
 (generate → sign → submit → wait), `support/raw-http.ts` (fetch client with JSON:API errors),
-`support/identity.ts` (identity challenges and NEP-413 signature verification), `support/native.ts`
+`support/identity.ts` (NEP-413 login requests and signature verification), `support/native.ts`
 (the `native` policy block).
 
 Python and Rust equivalents of the client and signers ship with this skill in `assets/`.

@@ -26,7 +26,7 @@ Policy = {
 }
 
 Native = {                                                // when present, every key is required
-  near:   { sign_message: string[], transfer: boolean, call: string[] },   // 0–256 NEAR accounts each
+  near:   { sign_message: string[], transfer: boolean, call: string[] },   // 0–256 entries each: NEAR accounts (sign_message also takes domains)
   evm:    { sign_typed_data: EvmTypedDataDomain[], sign_message: boolean, sign_transaction: boolean },
   solana: { sign_message: boolean, sign_transaction: boolean },
 }
@@ -116,7 +116,7 @@ Omit it and every native method is off. A policy update replaces the whole polic
 
 | Switch | Route (`POST /v1/agents/{agent_id}/native/…`) | What it allows |
 |---|---|---|
-| `near.sign_message: ["login.example.near"]` | `near/sign-message` | NEP-413 identity challenge for a listed service, so the agent proves it controls `near_account_id` |
+| `near.sign_message: ["app.example.com"]` | `near/sign-message` | NEP-413 message signing (site logins) for a listed recipient (NEAR account or domain) |
 | `near.transfer: true` | `near/transfer` (Idempotency-Key) | native NEAR from `near_account_id` to any account |
 | `near.call: ["app.example.near"]` | `near/call` (Idempotency-Key) | a function call on a listed contract |
 | `evm.sign_typed_data: [domain, …]` | `evm/sign-typed-data` | EIP-712 v4 under a listed domain only, and only the entry's `primary_types` if it lists them |
@@ -149,10 +149,10 @@ Omit it and every native method is off. A policy update replaces the whole polic
   `HyperliquidTransaction:UsdSend`, which pay any address. `primary_types` narrows the **kind** of
   message, never its fields: an allowed `HyperliquidTransaction:Withdraw` can still name any
   destination and amount.
-- **Identity challenge:** `near/sign-message` signs only the canonical
-  `near-intents-agent-api.identity.v1` challenge (exact fields `domain, purpose, chain, audience,
-  challenge, issued_at_ms, expires_at_ms`; `audience` = `recipient`; lives ≤ 5 minutes). Never a
-  transaction, an intent or free text.
+- **NEP-413 signing:** `near/sign-message` signs `{ message, recipient, nonce }` under the NEP-413
+  tag, never a transaction or an intent. `recipient` is a NEAR account or domain (printable ASCII,
+  ≤ 128), matched exactly against the list, no wildcard. The caller supplies the 32-byte `nonce`
+  (base64); `callbackUrl` is not supported. The signature (base64) is verified before it returns.
 - `intents.near` and `intents.far` are never accepted: listing them is `validation_failed`, a
   transfer or call to them `403 native_contract_forbidden`, a signature for them
   `403 signing_recipient_forbidden`.

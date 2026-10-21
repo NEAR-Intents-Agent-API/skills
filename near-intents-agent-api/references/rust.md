@@ -83,8 +83,9 @@ method (no grant).
 ```rust
 match agent.execute(&agent_id, "withdraw", &body, &key).await {
     Ok(op) => track(op),
-    Err(Error::Api { code, available_at, .. }) if code == "spend_budget_exceeded" => {
-        /* show remaining budget; retry after `available_at` with a NEW key */
+    Err(Error::Api { code, .. }) if code == "spend_budget_exceeded" => {
+        /* show usage.budget (remaining_usd, resets_at); retry with a NEW key after that cap's
+           resets_at, or once the owner raises it */
     }
     Err(e) if e.code() == Some("policy_destination_denied") => { /* ask the owner to allow it */ }
     Err(Error::Transport { idempotency_key, .. }) => {

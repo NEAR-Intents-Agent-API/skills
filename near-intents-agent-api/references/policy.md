@@ -71,12 +71,13 @@ Unknown fields are rejected (strict objects). Field names are snake_case.
 | `schedule` | weekly windows on the owner's clock when money actions may run (`only`) or are paused (`except`) | **API** |
 
 `budget` notes: charged atomically at dispatch using 1Click USD prices; an asset with no fresh
-price fails with `spend_price_unavailable` (only while a budget is set). A larger budget never
+price fails with `spend_price_unavailable` (only while a cap is on; with none on, nothing is counted and no price is read). A larger budget never
 lifts a per-asset limit; both must pass. Live usage is in `GET …/policy` →
 `usage.budget.{daily,weekly,monthly}.{limit_usd, spent_usd, remaining_usd, resets_at}`. Each cap's
-periods run from the moment the owner turned it on (on at 05:00 → resets daily at 05:00; months keep
-the date, clamped to shorter months): `resets_at` is when the current period ends and the whole cap
-is back. A new amount keeps the period; turning a cap off and on starts a new one. Moving funds
+periods run from the moment the applied policy turned it on (daily: every 24 h from then, on at
+05:00 UTC → resets at 05:00 UTC; weekly: every 7 days; monthly: the same date and time each month in
+UTC, clamped to the last day of shorter months, Jan 31 → Feb 28 → Mar 31): `resets_at` is when the
+current period ends and the whole cap is back. A new amount keeps the period; turning a cap off and on starts a new one. Moving funds
 to your own account on another chain or venue (your Hyperliquid or Polymarket address) counts like
 any withdrawal, and a deposit back does not credit it. Swap quotes and withdrawal previews
 (`dry: true`) charge nothing: they report the budget as `spend.budget` and warn with

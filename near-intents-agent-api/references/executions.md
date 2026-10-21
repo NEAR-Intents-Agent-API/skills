@@ -52,7 +52,8 @@ one. A swap quote and a withdrawal preview are both refused with 409 `agent_arch
 and uses no preview attempt.
 
 Before executing, read `warnings`. A spending-rule code there means the live request will be refused
-with that code: tell the user, reduce the amount, wait (`spend.budget.*.resets_at`, `available_at`),
+with that code: tell the user, reduce the amount, wait (until the exceeded cap's
+`spend.budget.*.resets_at`; `available_at` for a schedule warning),
 or ask the owner to change the policy (see [errors.md](errors.md)). A quote without such a warning
 is not a guarantee: it is a snapshot, other work can use the budget first, and a timelocked request
 is charged at dispatch.

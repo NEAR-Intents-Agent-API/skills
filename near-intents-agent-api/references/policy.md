@@ -77,7 +77,10 @@ lifts a per-asset limit; both must pass. Live usage is in `GET …/policy` →
 periods run from the moment the applied policy turned it on (daily: every 24 h from then, on at
 05:00 UTC → resets at 05:00 UTC; weekly: every 7 days; monthly: the same date and time each month in
 UTC, clamped to the last day of shorter months, Jan 31 → Feb 28 → Mar 31): `resets_at` is when the
-current period ends and the whole cap is back. A new amount keeps the period; turning a cap off and on starts a new one. Moving funds
+current period ends and the whole cap is back. A new amount keeps the period; turning a cap off and on starts a new one. Periods are fixed, not
+rolling, so up to twice a cap can move across a reset ($100 at 04:59 and $100 at 05:00 under a
+$100 daily cap on from 05:00); a smaller shorter-window cap, per-asset hourly `limits` or
+`timelock_ms` bound that burst. Moving funds
 to your own account on another chain or venue (your Hyperliquid or Polymarket address) counts like
 any withdrawal, and a deposit back does not credit it. Swap quotes and withdrawal previews
 (`dry: true`) charge nothing: they report the budget as `spend.budget` and warn with

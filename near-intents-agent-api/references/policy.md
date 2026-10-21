@@ -66,15 +66,17 @@ Unknown fields are rejected (strict objects). Field names are snake_case.
 | `limits` | per-asset caps per transaction and per rolling hour/day/month. Needs named assets to be meaningful | provider; windows also **API** |
 | `max_actions_per_hour` | rate cap on money actions regardless of amount | provider and **API** |
 | `destinations` | where withdrawals/transfers may go | **API** |
-| `budget` | total USD value across all assets, rolling 24 h / 7 d / 30 d; shared by every grant | **API** |
+| `budget` | total USD value across all assets per day / week / month, counted from when each cap was turned on; shared by every grant | **API** |
 | `timelock_ms` | every outgoing money action is `QUEUED` this long; owner can `execution_cancel` | **API** |
 | `schedule` | weekly windows on the owner's clock when money actions may run (`only`) or are paused (`except`) | **API** |
 
 `budget` notes: charged atomically at dispatch using 1Click USD prices; an asset with no fresh
 price fails with `spend_price_unavailable` (only while a budget is set). A larger budget never
 lifts a per-asset limit; both must pass. Live usage is in `GET …/policy` →
-`usage.budget.{daily,weekly,monthly}.{limit_usd, spent_usd, remaining_usd, resets_at}`. The windows
-are rolling: `resets_at` is when a window's oldest charge ages out, not a daily reset. Moving funds
+`usage.budget.{daily,weekly,monthly}.{limit_usd, spent_usd, remaining_usd, resets_at}`. Each cap's
+periods run from the moment the owner turned it on (on at 05:00 → resets daily at 05:00; months keep
+the date, clamped to shorter months): `resets_at` is when the current period ends and the whole cap
+is back. A new amount keeps the period; turning a cap off and on starts a new one. Moving funds
 to your own account on another chain or venue (your Hyperliquid or Polymarket address) counts like
 any withdrawal, and a deposit back does not credit it. Swap quotes and withdrawal previews
 (`dry: true`) charge nothing: they report the budget as `spend.budget` and warn with

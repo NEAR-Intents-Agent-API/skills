@@ -64,9 +64,12 @@ What the rest of the answer holds:
 - `spend.budget`: `{ daily, weekly, monthly }`, each `{ limit_usd, spent_usd, remaining_usd,
   resets_at }` as `usage.budget` on `GET …/policy`, before this request.
 - `fee`: `{ amount_usd, percent }` or `null`. A swap compares the input's value with the quoted
-  output's value at current prices. A withdrawal values the provider's `estimated_fee` only when its
-  `fee_token` is the withdrawn asset (or the fee is zero); otherwise `null`.
-- `warnings`: `high_fee` when the route keeps more than 5%; `asset_delivered_as_is` when a
+  output's value at current prices. A withdrawal is valued only on chain `near`, from the
+  provider's `estimated_fee` when it is zero or its `fee_token` is the withdrawn asset. A
+  withdrawal to any other chain is always `null`: its `quote.amount_out` is in the destination
+  chain's asset, which the preview does not name, so compare `amount` with `amount_out` yourself.
+- `warnings`: `high_fee` when the route keeps more than 5%, judged only where `fee` is valued
+  (never for a bridged withdrawal); `asset_delivered_as_is` when a
   non-USDC asset is withdrawn to chain `hypercore`: it lands in HyperCore spot as that asset, not as
   USDC perps margin. Swap to USDC first to fund perps. Any spending-rule code (above) means the live
   request would be refused with it. Show `detail` to the user.
@@ -100,6 +103,9 @@ the client a ~150 s timeout. `withdraw` with `async: true` returns as soon as it
 - `min_amount_out`: atomic floor of the destination asset; the swap refunds rather than fill
   below it.
 - `amount_too_low`: below the route minimum (confidential swaps have their own minimum).
+  `meta.min_amount`, when the provider states it, is that minimum in atomic units of the asset
+  sent: quote at least that. A refusal recorded on an operation keeps it as `details.min_amount`,
+  so a replay under the same key or `GET /v1/status` states it too.
 - `route_unavailable` / `quote_unavailable`: nothing was submitted; retry later with a **new**
   idempotency key or pick another pair. For `quote_unavailable` (the quote service did not answer),
   read `GET /v1/network`: retry once `one_click` reports ok.

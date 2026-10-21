@@ -25,8 +25,9 @@ guide is `GET /llms.txt`. If this file and the server disagree, the server wins.
 - **Timeouts**: give settlement writes (non-dry swap/withdraw/transfer/shield/unshield) ~150 s,
   everything else ~65 s (long-poll is 30 s max). Don't retry on client timeout with a new key.
 - **Errors**: JSON:API `{ errors: [{ status, code, title, detail?, source?, meta? }], meta: { request_id } }`.
-  Branch on `errors[0].code`. `meta.retryable`, `meta.available_at`, and `Retry-After` header on
-  429/503. See [errors.md](errors.md).
+  Branch on `errors[0].code`. `meta.retryable`, `meta.available_at`, `meta.min_amount` (on
+  `amount_too_low`, when the provider states it), and `Retry-After` header on 429/503. See
+  [errors.md](errors.md).
 
 ## Endpoint catalogue
 

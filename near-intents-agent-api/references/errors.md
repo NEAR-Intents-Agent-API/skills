@@ -44,7 +44,7 @@ Every error is a JSON:API document:
 | `policy_action_denied` | 403 | action (or confidential form) not in policy → owner `policy_update` |
 | `policy_destination_denied` | 403 | address not allowed → owner adds it to `destinations` |
 | `policy_schedule_denied` | 403 | outside the owner's `schedule` when it would run (after the timelock); nothing recorded → submit the same request at `meta.available_at`, or owner changes `schedule` |
-| `spend_budget_exceeded` | 403 | shared USD budget used up → wait for the window (`usage.budget.*.resets_at`, or `spend.budget` on a dry run: the time its oldest charge ages out) or owner raises cap; retry with a **new** key |
+| `spend_budget_exceeded` | 403 | shared USD budget used up → wait for the period to end (`usage.budget.*.resets_at`, or `spend.budget` on a dry run: the whole cap is back then) or owner raises cap; retry with a **new** key |
 | `policy_limit_exceeded` | 403 | the asset's hourly/daily/monthly limit would be passed (shield/unshield count too) → wait for the window or owner raises it; retry with a **new** key |
 | `policy_action_limit_exceeded` | 403 | `max_actions_per_hour` used up → wait for the hour or owner raises it; retry with a **new** key |
 | `policy_usage_unavailable` | 409 | earlier actions have no per-asset count and a limit applies; nothing sent → clears when they leave the window, or the operator reconciles them |

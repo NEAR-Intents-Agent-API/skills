@@ -41,7 +41,7 @@ layer can lift it:
 | `wallet_frozen` | policy `frozen` | owner `agent_unfreeze` |
 | `policy_action_denied` | policy `actions` / `confidential` | owner `policy_update` |
 | `policy_destination_denied` | policy `destinations` | owner `policy_update` |
-| `spend_budget_exceeded` | policy `budget` (USD, shared, rolling windows) | owner raises cap, or wait until `resets_at` (when the window's oldest charge ages out) |
+| `spend_budget_exceeded` | policy `budget` (USD, shared, per day/week/month) | owner raises cap, or wait until `resets_at` (when the period ends and the whole cap is back) |
 | `policy_limit_exceeded`, `policy_action_limit_exceeded` | policy `limits` (hourly/daily/monthly) / `max_actions_per_hour`, counted by the API | owner raises the limit, or wait for the window |
 | `policy_usage_unavailable` | earlier actions the API has no per-asset count for | wait until they leave the window, or the operator reconciles them |
 | `policy_schedule_denied` | policy `schedule` (owner's weekly hours) | submit again at `meta.available_at`, or owner changes `schedule` |
@@ -126,8 +126,9 @@ with `approval_vote`; EVM and passkey votes are confirmed by the owner's `0s` wa
   NEAR Intents account (no bridge).
 - Swaps and withdrawals route through 1Click; `dry: true` returns its quote with `spend`, `fee` and
   `warnings`, which lists any spending rule the live request would fail.
-- The USD budget is rolling, and moving funds to your own account on another chain or venue (your
-  Hyperliquid or Polymarket address) counts like any withdrawal; a deposit back does not credit it.
+- Each USD cap resets in full at the end of its period, counted from when the owner turned it on;
+  moving funds to your own account on another chain or venue (your Hyperliquid or Polymarket
+  address) counts like any withdrawal, and a deposit back does not credit it.
 
 ## Lifecycle states
 

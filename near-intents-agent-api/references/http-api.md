@@ -177,7 +177,7 @@ PolicyView = {
   provider_policy_synced: boolean,         // in force only when APPLIED && true
   cooldowns, policy: Policy | null,
   usage: {
-    budget: { daily|weekly|monthly: { limit_usd, spent_usd, remaining_usd, resets_at } },  // rolling windows
+    budget: { daily|weekly|monthly: { limit_usd, spent_usd, remaining_usd, resets_at } },  // resets_at = end of the current period
     timelock: { delay_ms, scheduled_count }
   }
 }

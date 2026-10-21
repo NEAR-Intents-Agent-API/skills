@@ -25,6 +25,10 @@ Every error is a JSON:API document:
   attempt took effect; a new key is allowed only after a proven refusal (retry rule 4). Never
   decide from `detail`.
 - `meta.available_at` → when a cooldown/quota/throttle lifts. 429/503 also send `Retry-After`.
+- `meta.min_amount` → on `amount_too_low` only, when the provider states the route minimum as a
+  whole number: that minimum in atomic units of the asset sent. Quote at least that. Absent → the
+  provider gave no number; quote a larger amount. A refusal recorded on an operation keeps it as
+  `details.min_amount`.
 - Unknown code → fall back to the HTTP status class. Always log `meta.request_id`.
 
 ## Decision table
@@ -57,7 +61,7 @@ Every error is a JSON:API document:
 | `signing_recipient_forbidden` | 403 | `intents.near`/`intents.far` are never signing recipients |
 | **Execution / routing** | | |
 | `insufficient_balance` | 409 | fund the account or lower amount |
-| `amount_too_low` | 400 | below route minimum → quote a larger amount |
+| `amount_too_low` | 400 | below route minimum → quote at least `meta.min_amount` (atomic units of the asset sent) when present, else a larger amount |
 | `route_unavailable` | 400 | no route/liquidity now; nothing submitted → other pair or later, new key |
 | `quote_unavailable` | 503 | the quote service did not answer; nothing submitted → read `GET /v1/network` (`one_click`), retry with a new key once it reports ok |
 | `unsupported_chain`, `unsupported_token`, `invalid_address` | 400/409 | change chain/asset/address |
@@ -143,8 +147,9 @@ no quote: a swap quote and a withdrawal preview are both refused with 409 `agent
 
 ## Wrapping errors in your code
 
-TypeScript SDK: `AgentApiError { status, code, title, detail, retryable, availableAt, requestId,
-errors, idempotencyKey }`; transport failures throw `AgentApiRequestError { idempotencyKey }`.
+TypeScript SDK: `AgentApiError { status, code, title, detail, retryable, availableAt, minAmount,
+requestId, errors, idempotencyKey }` (`minAmount` from SDK 0.7; earlier versions read
+`errors[0].meta.min_amount`); transport failures throw `AgentApiRequestError { idempotencyKey }`.
 The Python/Rust assets mirror this (`AgentApiError.code`, `.available_at`, …; Rust
 `Error::Api { … }` with `error.code()`).
 

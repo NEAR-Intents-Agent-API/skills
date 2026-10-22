@@ -42,6 +42,11 @@ GET /v1/status?correlation_id=<id>&wait_ms=30000
 - `GET /v1/agents/{id}/history` lists everything for an activity feed (newest first). Deposit
   addresses nothing was paid into (open, expired, closed by deletion) are left out unless
   `include_unpaid=true`; read one by its `op_…` id with `GET /v1/status`.
+- `details.request` on an execution's status and history echoes the request as admitted, in the
+  request body's field names (`origin_asset`, `destination_asset`, `asset`, `amount`,
+  `min_amount_out`, `chain`, `recipient`, `memo`, `confidential`, each only when it applies), so a
+  client can show a transfer's recipient or what is reserved per asset. Executions admitted before
+  it was recorded have none.
 - A single long poll does not promise settlement; `SUCCESS` means reconciled evidence, not just
   a broadcast hash.
 

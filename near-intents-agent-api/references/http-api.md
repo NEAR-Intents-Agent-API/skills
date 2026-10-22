@@ -84,8 +84,8 @@ Details: [owner-intents.md](owner-intents.md), signing: [signing.md](signing.md)
 | Path | Auth | Body |
 |---|---|---|
 | `/swap` | key, grant, idem | `origin_asset`, `destination_asset`, `amount`, `min_amount_out?`, `confidential?`, `dry?` |
-| `/withdraw` | key, grant, idem | `asset`, `amount`, `chain`, `recipient`, `memo?`, `confidential?`, `wrapped?`, `async?`, `dry?` |
-| `/transfer` | key, grant, idem | `asset`, `amount`, `recipient` (NEAR Intents account), `confidential?` |
+| `/withdraw` | key, grant, idem | `asset`, `amount`, `chain`, `recipient`, `memo?`, `confidential?`, `async?`, `dry?` |
+| `/transfer` | key, grant, idem | `asset`, `amount`, `recipient` (NEAR Intents account; a named one must exist on NEAR, else `invalid_address`), `confidential?` |
 | `/shield`, `/unshield` | key, grant, idem | `asset`, `amount` |
 | `/deposit` | key, idem | `origin_asset`, `destination_asset?`, `amount?`, `confidential?` |
 | `/recover` | key, grant, idem (original) | `correlation_id`, `request: { type, …original body }` |
@@ -99,9 +99,9 @@ Details: [owner-intents.md](owner-intents.md), signing: [signing.md](signing.md)
 | `near/call` → 202, idem | `near.call` lists `receiver_id` | `receiver_id`, `method_name`, `args?` \| `args_base64?`, `gas?`, `deposit?` | `StatusResponse` |
 | `evm/sign-typed-data` → 200 | domain (and `primaryType`, if the entry lists `primary_types`) in `evm.sign_typed_data` | `chain`, `typed_data` (EIP-712 v4; `message` ≤ 65536 bytes as canonical JSON) | `NativeSignature` |
 | `evm/sign-message` → 200 | `evm.sign_message` | `chain`, `message`, `encoding?` | `NativeSignature` |
-| `evm/sign-transaction` → 200 | `evm.sign_transaction` | `chain`, `unsigned_tx` (`0x` serialized) | `NativeSignature` |
+| `evm/sign-transaction` → 200 | `evm.sign_transaction` | `chain`, `unsigned_tx` (`0x` serialized unsigned EIP-2718 or EIP-155 transaction for `chain`) | `NativeSignature` |
 | `solana/sign-message` → 200 | `solana.sign_message` | `message`, `encoding?` (`utf8`/`hex`/`base64`) | `NativeSignature` |
-| `solana/sign-transaction` → 200 | `solana.sign_transaction` | `unsigned_tx` (base64 message) | `NativeSignature` |
+| `solana/sign-transaction` → 200 | `solana.sign_transaction` | `unsigned_tx` (base64 legacy or v0 transaction message) | `NativeSignature` |
 
 EVM `chain`: `ethereum`, `polygon`, `base`, `arbitrum`, `optimism`, `bsc`, `avalanche`,
 `hyperevm`, `hood` (one address on all). `NativeSignature = { correlation_id, chain, account_id,
@@ -148,7 +148,7 @@ reads `PROCESSING`, with `details.provider_status` keeping the provider's own st
 
 | type | details |
 |---|---|
-| executions, `deposit`, `agent_delete` | `action`, `near_account_id?`, `provider_request_id?`, `chain?`, `execute_after?`, `delay_ms?`, `approval_id?`, `intent_hash?`, `tx_hash?`, `destination_tx_hash?`, `amount_out?`, `deposit_address?`, `memo?`, `min_amount?`, `min_amount_out?`, `expires_at?`, `refund_to?`, `refund_tx_hash?`, `failure_reason?`, `reason?` (NEEDS_REVIEW), `never_executed?`, `never_submitted?`, `settled_late?`, + provider fields |
+| executions, `deposit`, `agent_delete` | `action`, `request?` (the request as admitted, in the request body's field names: optional `origin_asset`, `destination_asset`, `asset`, `amount`, `min_amount_out`, `chain`, `recipient`, `memo`, `confidential`; `confidential` is the balance it spends from, or for a deposit credits), `near_account_id?`, `provider_request_id?`, `chain?`, `execute_after?`, `delay_ms?`, `approval_id?`, `intent_hash?`, `tx_hash?`, `destination_tx_hash?`, `amount_out?`, `deposit_address?`, `memo?`, `min_amount?`, `min_amount_out?`, `expires_at?`, `refund_to?`, `refund_tx_hash?`, `failure_reason?`, `reason?` (NEEDS_REVIEW), `never_executed?`, `never_submitted?`, `settled_late?`, + provider fields |
 | `agent_create` | `agent_id`, `revision`, `policy_hash`, `transaction_hash` |
 | `policy_update`, `agent_freeze`, `agent_unfreeze` | `revision`, `policy_hash`, `transaction_hash` (null for off-chain changes) |
 | `grant_issue` | `grant: GrantView \| null` |

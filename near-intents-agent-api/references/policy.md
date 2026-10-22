@@ -127,8 +127,8 @@ Omit it and every native method is off. A policy update replaces the whole polic
 | `near.call: ["app.example.near"]` | `near/call` (Idempotency-Key) | a function call on a listed contract |
 | `evm.sign_typed_data: [domain, …]` | `evm/sign-typed-data` | EIP-712 v4 under a listed domain only, and only the entry's `primary_types` if it lists them |
 | `evm.sign_message: true` | `evm/sign-message` | EIP-191 message |
-| `evm.sign_transaction: true` | `evm/sign-transaction` | any EVM transaction |
-| `solana.sign_message` / `solana.sign_transaction` | `solana/sign-message` / `solana/sign-transaction` | Solana message / transaction |
+| `evm.sign_transaction: true` | `evm/sign-transaction` | any EVM transaction (one serialized unsigned EIP-2718 or EIP-155 transaction for `chain`; anything else is `validation_failed`) |
+| `solana.sign_message` / `solana.sign_transaction` | `solana/sign-message` / `solana/sign-transaction` | Solana message / transaction (`sign-transaction` takes one legacy or v0 transaction message; anything else is `validation_failed`) |
 
 - **The switch is the whole fence.** `destinations`, `budget`, `timelock_ms`, `schedule` and
   `owner_approval` do not apply. A native NEAR transfer can go anywhere; a typed-data signature

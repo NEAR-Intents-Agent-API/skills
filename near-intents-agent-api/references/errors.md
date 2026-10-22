@@ -37,7 +37,7 @@ Every error is a JSON:API document:
 |---|---|---|
 | **Auth & request** | | |
 | `invalid_api_key` | 401 | wrong or revoked key, stray whitespace, or a base URL from a different deployment; fix config, don't retry |
-| `validation_failed` | 400 | fix the fields in `source.pointer` |
+| `validation_failed` | 400 | fix the fields in `source.pointer` (also: an amount that moves funds is `0`, a swap's two assets are the same, a native `sign-transaction` body is not one transaction) |
 | `invalid_json`, `invalid_cursor` | 400 | fix the request |
 | `idempotency_key_required` | 400 | add `Idempotency-Key` |
 | `idempotency_conflict` | 409 | same key used with a different body; resend original body or use a new key for a genuinely new request |
@@ -64,8 +64,8 @@ Every error is a JSON:API document:
 | `amount_too_low` | 400 | below route minimum → quote at least `meta.min_amount` (atomic units of the asset sent) when present, else a larger amount |
 | `route_unavailable` | 400 | no route/liquidity now; nothing submitted → other pair or later, new key |
 | `quote_unavailable` | 503 | the quote service did not answer; nothing submitted → read `GET /v1/network` (`one_click`), retry with a new key once it reports ok |
-| `unsupported_chain`, `unsupported_token`, `invalid_address` | 400/409 | change chain/asset/address |
-| `wrapped_unsupported` | 400 | drop `wrapped`; it only applies to NEAR withdrawn to chain `near` |
+| `unsupported_chain`, `unsupported_token`, `invalid_address` | 400/409 | change chain/asset/address. `invalid_address`: the recipient is not a valid address for the chain (refused before the policy is read), the provider refused it, or a `transfer` recipient is a named NEAR account that does not exist. Nothing was sent |
+| `near_rpc_unavailable` | 503 | `transfer` only: NEAR RPC did not answer, so a named recipient could not be checked; retryable, nothing sent → retry the same request (same key) shortly |
 | `wallet_busy` | 409 | another money op on this wallet is running; nothing sent, refusal recorded (not retryable) → after it finishes, a **new** key |
 | `spend_price_unavailable` | 503 | no fresh USD price for budget accounting → retry later, new key |
 | `authorization_stale` | 409 | grant/key revoked or policy/owner changed between admission and dispatch → re-evaluate |

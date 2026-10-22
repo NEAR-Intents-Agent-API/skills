@@ -30,7 +30,7 @@ Follow these in every integration; most bugs and lost-fund incidents come from b
    `intent.standard` (`nep413`, `nep366`, `eip712`, `webauthn`). Never rebuild, re-serialize,
    hash or reorder it; submit `{...intent, <wallet output fields>}`.
 3. **Amounts are atomic integer strings** (`"1000000"` = 1 USDC at 6 decimals). Get `decimals`
-   and `asset_id` from `GET /v1/tokens`. Never use floats.
+   and `asset_id` from `GET /v1/tokens`. Never use floats. Amounts that move funds must be > 0.
 4. **Every money-moving call carries an `Idempotency-Key`** (8–128 chars `[A-Za-z0-9._:-]`).
    Create it, persist it with the request, *then* send. Retry only with the same key and body.
 5. **`UNCERTAIN` means the outcome is not yet proven ("maybe executed").** Keep polling the original `correlation_id`. Never

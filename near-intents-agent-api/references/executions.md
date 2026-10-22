@@ -6,13 +6,15 @@ All are `POST /v1/agents/{agent_id}/<action>` and return `202` with a `StatusRes
 | Action | Headers | Body | Policy needs |
 |---|---|---|---|
 | `swap` | key, grant, idem | `origin_asset`, `destination_asset`, `amount`, `min_amount_out?`, `confidential?`, `dry?` | `swap` (+`confidential`) |
-| `withdraw` | key, grant, idem | `asset`, `amount`, `chain`, `recipient`, `memo?`, `confidential?`, `wrapped?`, `async?`, `dry?` | `withdraw`, destination allowed |
+| `withdraw` | key, grant, idem | `asset`, `amount`, `chain`, `recipient`, `memo?`, `confidential?`, `async?`, `dry?` | `withdraw`, destination allowed |
 | `transfer` | key, grant, idem | `asset`, `amount`, `recipient`, `confidential?` | `transfer`, destination allowed |
 | `shield` / `unshield` | key, grant, idem | `asset`, `amount` | `confidential: true` |
 | `deposit` | key, idem | `origin_asset`, `destination_asset?`, `amount?`, `confidential?` | nothing (always allowed) |
 | `recover` | key, grant, original idem | `correlation_id`, `request: {type, …original body}` | re-authorized in full |
 
-`amount` is atomic (integer string). Asset ids come from `GET /v1/tokens`.
+`amount` is atomic (integer string) and must be greater than zero for every action that moves funds
+(`validation_failed` otherwise). Asset ids come from `GET /v1/tokens`. A recipient that is not a valid
+address for its chain is refused with `400 invalid_address` before the policy is read.
 
 ## Quote first
 
@@ -35,7 +37,7 @@ rolling 24 h. Every preview that reaches the provider uses one, failed ones and 
 warning included (`withdraw_preview_limit_reached`). The `quote`
 object belongs to 1Click (amount out, fees, time estimate); treat its fields as informational
 and do not hard-code its shape. Use it to show the user expected output and to choose
-`min_amount_out` (slippage floor).
+`min_amount_out` (minimum output).
 
 **Dry runs report the spending rules, they are not refused by them.** A quote or preview on a usable
 account always goes to 1Click and returns `200`. It also checks the spending rules the live request
@@ -101,8 +103,10 @@ the client a ~150 s timeout. `withdraw` with `async: true` returns as soon as it
 ## Swap
 
 - Inside the account; funds never leave NEAR Intents. Needs no destination rule.
-- `min_amount_out`: atomic floor of the destination asset; the swap refunds rather than fill
-  below it.
+- `origin_asset` and `destination_asset` must differ (`validation_failed`).
+- `min_amount_out`: atomic minimum output of the destination asset, sent to the provider. The
+  quote does not apply it; a swap the provider reports below it never reads `SUCCESS` but
+  `NEEDS_REVIEW` with `amount_out_below_minimum` (`details.requested_min_amount_out`).
 - `amount_too_low`: below the route minimum (confidential swaps have their own minimum).
   `meta.min_amount`, when the provider states it, is that minimum in atomic units of the asset
   sent: quote at least that. A refusal recorded on an operation keeps it as `details.min_amount`,
@@ -116,11 +120,13 @@ the client a ~150 s timeout. `withdraw` with `async: true` returns as soon as it
 - Leaves NEAR Intents to `recipient` on `chain`. Public and confidential withdrawals reach every
   `blockchain` value `GET /v1/tokens` lists (`near`, `eth`, `sol`, `btc`, `tron`, …).
 - `memo` for chains/exchanges that need one (the policy's `only` rule matches memo exactly).
-- NEAR (`nep141:wrap.near`, or `near`) withdrawn to chain `near` arrives as **native NEAR**, as from
-  a NEAR wallet or 1Click: no `wrap.near` registration needed, and what exchanges and invoices
-  expect. `wrapped: true` delivers wNEAR instead; only for that route (`wrapped_unsupported`).
+- NEAR (`nep141:wrap.near`, or `near`) withdrawn to chain `near` always arrives as **native NEAR**,
+  from the public or the confidential balance, as from a NEAR wallet or 1Click: no `wrap.near`
+  registration needed, and what exchanges and invoices expect. A confidential one is paid out by
+  1Click, which unwraps it. There is no option to withdraw wNEAR to chain `near`.
 - `unsupported_chain` means a chain the catalog doesn't list; `route_unavailable` means no
-  liquidity for that asset now; `invalid_address` when the provider rejects the address format.
+  liquidity for that asset now; `invalid_address` when the address is not valid for the chain or the provider rejects it
+  (a malformed one is refused before the policy is read).
 - Moving funds to your own account on another chain or venue (your Hyperliquid or Polymarket
   address, say) counts against the USD budget like any withdrawal, and a deposit back does not
   credit it.
@@ -133,6 +139,10 @@ the client a ~150 s timeout. `withdraw` with `async: true` returns as soon as it
 - To another NEAR Intents account (`recipient` = NEAR account id), no bridge, near-instant.
   A recipient is a named account (`alice.near`), a 64-hex implicit account or a lowercase `0x`
   EVM address.
+- A named recipient must exist on NEAR, else `400 invalid_address`: NEAR Intents credits any id, and
+  funds sent to an unregistered name cannot be recovered. Implicit ids (64 hex, or `0x` + 40 hex)
+  need no account. If NEAR RPC cannot answer, the transfer is refused with retryable
+  `503 near_rpc_unavailable`; nothing is sent.
 - `confidential: true` spends from and to confidential balances. Shield first if the agent's
   confidential balance is short.
 - **near.com addresses.** near.com shows its users' Intents account as `nearcom:<account>`
@@ -172,6 +182,8 @@ Idempotency-Key: dep:user123:<uuid>
   `PENDING_DEPOSIT`.
 - Without `amount` an address stays open 3 days; with it, 24 h. Each lookup issues a new address.
 - Quota: 100 deposit addresses per agent per rolling 24 h → `deposit_quota_exceeded` (429).
+- A deposit that has no `details.deposit_address` ten minutes after it was created never gets one and
+  ends `FAILED` with `deposit_address_missing`; nothing can have been paid into it.
 - Native NEAR-side funding: `GET …/addresses/near` returns the account; send NEP-141 tokens to it.
 
 Never show the `correlation_id` as a payment address. Use a fresh idempotency key per deposit

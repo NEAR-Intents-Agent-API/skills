@@ -9,9 +9,9 @@
 | `PENDING_APPROVAL` | waiting for the owner's `approval_vote` (`details.approval_id`) | ask the owner; poll slowly |
 | `PENDING_DEPOSIT` | deposit address issued, waiting for the payer's funds. **Only deposits report it** | show `deposit_address`; poll until `expires_at` |
 | `PROCESSING` | submitted, settlement not yet observed. Includes a withdrawal's or swap's bridge leg waiting on 1Click (`details.provider_status` keeps the provider's own state) and a provider `success` whose settlement it still reports pending | keep polling |
-| `SUCCESS` | settled with evidence | done |
+| `SUCCESS` | settled with evidence | done; `details.amount_out` (delivered) is present only now, or at `REFUNDED` after a partial fill. Before that read `expected_amount_out` and treat it as an estimate |
 | `REFUNDED` | route refunded the input (`refund_tx_hash`) | done; tell the user |
-| `FAILED` | never executed, or failed with `failure_code` | done; new request needs a new key |
+| `FAILED` | never executed, or failed with `failure_code` (an unpaid deposit: `deposit_expired`, a day after `expires_at`) | done; new request needs a new key |
 | `UNCERTAIN` | outcome not yet proven, **may have executed** | keep polling the same id; never resubmit under a new key |
 | `NEEDS_REVIEW` | automatic settlement stopped | stop; inspect `details.reason`; then `refresh=true` |
 

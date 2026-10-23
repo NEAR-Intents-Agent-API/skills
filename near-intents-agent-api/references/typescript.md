@@ -71,8 +71,9 @@ const agent = api.forGrant(token);                         // one client per gra
 const quote = await agent.swap(agentId, {
   origin_asset: "nep141:wrap.near", destination_asset: usdc, amount: "1000000000000000000000000", dry: true,
 });                                                          // QuoteResponse, no key: { dry, type, quote, spend, fee, warnings }
-// Never refused by the spending rules: quote.warnings lists each one the live swap would fail under its
-// code (spend_budget_exceeded, policy_schedule_denied + available_at, …). Check it before the real swap.
+// Never refused by the account's rules or the request's own checks: quote.warnings lists each one the live swap
+// would fail under its code (spend_budget_exceeded, policy_schedule_denied + available_at,
+// insufficient_balance + available_amount, …). Check it before the real swap.
 // A frozen, archived or deleted account gets no quote: it throws wallet_frozen, agent_archived or agent_deleted.
 // withdraw(…, { dry: true }) is the same shape but needs the grant and a key, and uses one of 20 daily attempts.
 
@@ -146,10 +147,15 @@ try {
   if (error instanceof AgentApiError) {
     switch (error.code) {
       case "policy_destination_denied": /* ask owner to allow the address */ break;
-      case "spend_budget_exceeded":     /* show remaining budget (a dry quote or preview warns with this code) */ break;
+      case "spend_budget_exceeded":     /* show remaining budget (a dry quote or preview warns with this code); nothing was recorded */ break;
+      case "insufficient_balance":      /* fund, or send at most error.availableAmount (atomic units) */ break;
       case "policy_schedule_denied":    /* outside owner hours: same request at error.availableAt */ break;
       case "policy_change_throttled":   /* error.availableAt */ break;
-      default: throw error;
+      default:
+        // error.layer: "request" | "auth" | "grant" | "policy" | "budget" | "balance" | "provider" | "api"
+        // policy/budget → ask the owner; balance → fund or send less; provider + error.retryable → same key later;
+        // request → fix the request
+        throw error;
     }
   } else if (error instanceof AgentApiRequestError) {
     // transport failure: retry with error.idempotencyKey and the same body

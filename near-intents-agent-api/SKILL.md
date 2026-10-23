@@ -46,9 +46,11 @@ Follow these in every integration; most bugs and lost-fund incidents come from b
    `policy_revision_conflict`, re-read and get a fresh signature.
 8. **A policy is in force only when `status: "APPLIED"` and `provider_policy_synced: true`.**
    Before that, executions fail with `policy_not_ready`.
-9. **Branch on `errors[0].code`**, never on `title`/`detail`. Refusal codes name the layer that
-   refused (grant, policy action, destination, provider policy, USD budget, schedule); only changing that
-   layer lifts it.
+9. **Branch on `errors[0].code`**, never on `title`/`detail`, and read `errors[0].layer` (`request`,
+   `auth`, `grant`, `policy`, `budget`, `balance`, `provider`, `api`) to know who acts next: `policy`
+   or `budget` → ask the owner; `balance` → fund or send less; `provider` with `meta.retryable` →
+   same request, same key, later; `request` → fix the request. Only changing the refusing layer lifts
+   it. See [references/errors.md](references/errors.md).
 10. **Funds go only to `details.deposit_address`.** A `correlation_id` (`op_…`/`intent_…`) is a
     tracking id, never an address.
 11. **One grant per session/assistant/bot.** Grants say *who* may act; the account policy says
@@ -85,9 +87,10 @@ owner signs ──► agent_create (policy) ──► grant_issue (token commitm
    optional `memo`, and `refund_to` (the agent's own balance).
 4. **Act** — `POST /v1/agents/{agent_id}/swap|transfer|withdraw|shield|unshield` with
    `X-API-Key`, `X-Grant-Token`, `Idempotency-Key`. Quote first with `dry: true`: a swap quote needs only `X-API-Key`; a withdrawal preview needs
-   the grant and a key, like the withdrawal (20 per agent per rolling 24 h). The spending rules
-   (schedule, USD budget, limits) never refuse a quote: it returns `spend`, `fee` and `warnings`, and
-   each rule the live call would fail is a warning under that call's error code. Read `warnings`
+   the grant and a key, like the withdrawal (20 per agent per rolling 24 h). Neither the account's
+   rules nor the request's own checks (unsupported token, invalid address, balance) refuse a quote: it
+   returns `spend`, `fee` and `warnings`, and each rule the live call would fail is a warning under
+   that call's error code (`insufficient_balance` adds `available_amount`). Read `warnings`
    before executing. An archived, deleted or frozen account gets no quote: it is refused with the
    code the live request gets (`agent_archived`, `agent_deleted`, `wallet_frozen`).
 5. **Observe** — `GET /v1/status?correlation_id=…&wait_ms=30000` until it stops moving.
@@ -128,9 +131,14 @@ The Python and Rust signers are verified byte-for-byte against near-api-js and v
 - Read `NEAR_INTENTS_AGENT_API_URL`/`NEAR_INTENTS_AGENT_API_KEY` from env; the base URL is `https://api.agentsonintents.com`
   unless the user runs a self-hosted or local deployment (then only the base URL changes).
 - Show `preview.summary` (and `preview.policy` / `preview.deletion`) to the owner before signing.
-- Read `GET /v1/network` before acting and after `quote_unavailable`, `route_unavailable` or
-  `provider_unavailable`; if a component is `down`, wait rather than change the request. After
-  `quote_unavailable`, retry with a new Idempotency-Key once `one_click` reports ok.
+- Read `GET /v1/network` before acting and after `route_unavailable` or `provider_unavailable`; if a
+  component is `down`, wait rather than change the request. `provider_unavailable` with
+  `meta.retryable`: the same request with the same key after `Retry-After`; without it the refusal
+  is recorded, so send the work again under a new key once `one_click` reports ok.
+- Never compute what the agent can spend yourself: read `available` / `available_raw` on
+  `GET …/balances` (balance less queued or timelocked work not yet dispatched). Read `amount_out`
+  only at `SUCCESS` (or `REFUNDED` after a partial fill); before then the figure is
+  `expected_amount_out`.
 - Writes against mainnet move real money: build in dry-run/quote mode first and gate live
   execution behind an explicit flag, as the examples do (`AGENT_ALLOW_WRITES`, `AGENT_EXECUTE`).
 - Do not invent endpoints or fields. If unsure, fetch `/openapi.json` or `/llms.txt` from the

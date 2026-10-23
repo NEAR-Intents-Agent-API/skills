@@ -25,35 +25,41 @@ POST …/withdraw  { "asset": "<usdc>", "amount": "5000000", "chain": "base", "r
         "spend": { "amount_usd": string | null, "budget": { "daily": {…}, "weekly": {…}, "monthly": {…} } },
         "fee": { "amount_usd": string, "percent": string } | null,
         "warnings": [ { "code": "high_fee" | "asset_delivered_as_is"
-                              | "policy_asset_denied" | "policy_schedule_denied" | "spend_price_unavailable"
-                              | "spend_budget_exceeded" | "policy_limit_exceeded" | "policy_action_limit_exceeded",
-                        "detail": string, "available_at"?: string } ] }
+                              | "policy_action_denied" | "policy_destination_denied" | "policy_asset_denied"
+                              | "policy_schedule_denied" | "spend_price_unavailable" | "spend_budget_exceeded"
+                              | "policy_limit_exceeded" | "policy_action_limit_exceeded" | "policy_usage_unavailable"
+                              | "unsupported_token" | "invalid_address" | "insufficient_balance",
+                        "detail": string, "available_at"?: string, "available_amount"?: string } ] }
 ```
 
 Dry runs charge no budget, reserve none and move nothing. A swap quote needs no grant and no
 idempotency key. A withdrawal preview needs the grant and an `Idempotency-Key`: the same key replays
 an identical preview for 60 s, an expired one needs a new key, and each agent gets 20 previews per
 rolling 24 h. Every preview that reaches the provider uses one, failed ones and ones carrying a rule
-warning included (`withdraw_preview_limit_reached`). The `quote`
+warning included (`withdraw_preview_limit_reached`); a refusal the provider states before it quotes
+(e.g. `route_unavailable`) gives the attempt back, an outage does not. The `quote`
 object belongs to 1Click (amount out, fees, time estimate); treat its fields as informational
 and do not hard-code its shape. Use it to show the user expected output and to choose
 `min_amount_out` (minimum output).
 
-**Dry runs report the spending rules, they are not refused by them.** A quote or preview on a usable
-account always goes to 1Click and returns `200`. It also checks the spending rules the live request
-would face: the policy's `assets`, the schedule at the time the request would run (after `timelock_ms`), the USD budget,
-then per-asset limits and `max_actions_per_hour`. Each one it would fail is a `warnings` entry whose
-`code` is the code the live request would get (`policy_asset_denied`, `policy_schedule_denied`, `spend_price_unavailable`,
-`spend_budget_exceeded`, `policy_limit_exceeded`, `policy_action_limit_exceeded`); the schedule
-warning also carries `available_at`, when the schedule next allows it. Only the live request is
-refused with these codes.
+**Dry runs report the rules and checks, they are not refused by them.** A quote or preview on a usable
+account always goes to 1Click and returns `200`. It also checks what the live request would face: the
+policy's action switch and destination rule, `assets`, the schedule at the time the request would run
+(after `timelock_ms`), the USD budget, per-asset limits and `max_actions_per_hour`, then the request's
+own checks. Each one it would fail is a `warnings` entry whose `code` is the code the live request
+would get (`policy_action_denied`, `policy_destination_denied`, `policy_asset_denied`,
+`policy_schedule_denied`, `spend_price_unavailable`, `spend_budget_exceeded`, `policy_limit_exceeded`,
+`policy_action_limit_exceeded`, `policy_usage_unavailable`, `unsupported_token`, `invalid_address`,
+`insufficient_balance`). `policy_schedule_denied` also carries `available_at`, when the schedule next
+allows it; `insufficient_balance` carries `available_amount`, what the balance can still spend (atomic
+units). Only the live request is refused with these codes.
 
 An archived, deleted or frozen account gets no quote: an account that can do nothing has no use for
 one. A swap quote and a withdrawal preview are both refused with 409 `agent_archived`,
 `agent_deleted` or `wallet_frozen`, the code the live request gets. The refusal reaches no provider
 and uses no preview attempt.
 
-Before executing, read `warnings`. A spending-rule code there means the live request will be refused
+Before executing, read `warnings`. A rule or check code there means the live request will be refused
 with that code: tell the user, reduce the amount, wait (until the exceeded cap's
 `spend.budget.*.resets_at`; `available_at` for a schedule warning),
 or ask the owner to change the policy (see [errors.md](errors.md)). A quote without such a warning
@@ -74,7 +80,7 @@ What the rest of the answer holds:
 - `warnings`: `high_fee` when the route keeps more than 5%, judged only where `fee` is valued
   (never for a bridged withdrawal); `asset_delivered_as_is` when a
   non-USDC asset is withdrawn to chain `hypercore`: it lands in HyperCore spot as that asset, not as
-  USDC perps margin. Swap to USDC first to fund perps. Any spending-rule code (above) means the live
+  USDC perps margin. Swap to USDC first to fund perps. Any rule or check code (above) means the live
   request would be refused with it. Show `detail` to the user.
 
 ## Execute
@@ -92,7 +98,9 @@ Content-Type: application/json
 Then poll `GET /v1/status?correlation_id=op_…&wait_ms=30000` (see
 [status-and-recovery.md](status-and-recovery.md)). Typical paths:
 
-- no timelock/approval: `PROCESSING` → `SUCCESS` (`details.amount_out`, `intent_hash`, `tx_hash`)
+- no timelock/approval: `PROCESSING` → `SUCCESS` (`details.amount_out`, `intent_hash`, `tx_hash`).
+  `amount_out` is the delivered amount and is present only at `SUCCESS` (or `REFUNDED` after a
+  partial fill); before then read `details.expected_amount_out`, and never treat it as final
 - timelock: `QUEUED` (`details.execute_after`) → `PROCESSING` → …
 - approval: `PENDING_APPROVAL` (`details.approval_id`) → owner votes → `PROCESSING` → …
 - route refunded: `REFUNDED` (`details.refund_tx_hash`); never filled: `FAILED` with `failure_code`
@@ -111,9 +119,11 @@ the client a ~150 s timeout. `withdraw` with `async: true` returns as soon as it
   `meta.min_amount`, when the provider states it, is that minimum in atomic units of the asset
   sent: quote at least that. A refusal recorded on an operation keeps it as `details.min_amount`,
   so a replay under the same key or `GET /v1/status` states it too.
-- `route_unavailable` / `quote_unavailable`: nothing was submitted; retry later with a **new**
-  idempotency key or pick another pair. For `quote_unavailable` (the quote service did not answer),
-  read `GET /v1/network`: retry once `one_click` reports ok.
+- `route_unavailable`: no route or liquidity for this pair or amount; nothing was submitted.
+  Repeating the request won't help: try a different amount or pair under a new key.
+- `provider_unavailable` (the provider or quote service did not answer): read `GET /v1/network`
+  (`one_click`). With `meta.retryable`, repeat the same request with the same key after
+  `Retry-After`; without it the refusal is recorded, so use a new key once `one_click` reports ok.
 
 ## Withdraw
 
@@ -181,6 +191,11 @@ Idempotency-Key: dep:user123:<uuid>
 - Then poll the `op_…` id: `PENDING_DEPOSIT` → `PROCESSING` → `SUCCESS`. Only deposits report
   `PENDING_DEPOSIT`.
 - Without `amount` an address stays open 3 days; with it, 24 h. Each lookup issues a new address.
+- An address still unpaid one day after `details.expires_at` ends `FAILED` with `deposit_expired`.
+  A deposit with a known deposit tx or amount never expires; it stays open until 1Click settles or
+  refunds it. A late payment is refunded to `details.refund_to`, so `deposit_expired` loses nothing.
+  A quote 1Click refuses in words the API does not map is `provider_refused` (400, `detail` quotes
+  the reason); no address exists, so change the request and use a new key.
 - Quota: 100 deposit addresses per agent per rolling 24 h → `deposit_quota_exceeded` (429).
 - A deposit that has no `details.deposit_address` ten minutes after it was created never gets one and
   ends `FAILED` with `deposit_address_missing`; nothing can have been paid into it.
@@ -199,10 +214,12 @@ Only for `UNCERTAIN` operations that provably never reached the provider (no
 ## Pre-flight checklist for an agent tool
 
 1. `GET …/policy` in force? action allowed? destination listed? budget `remaining_usd` enough?
-2. Balance enough? (`GET …/balances`)
-3. Dry quote (swap/withdraw) and show it, with `fee` and `warnings`. A spending-rule code in
+2. Balance enough? Read `available` / `available_raw` on `GET …/balances` (balance less queued or
+   timelocked work not yet dispatched); don't subtract queued work yourself.
+3. Dry quote (swap/withdraw) and show it, with `fee` and `warnings`. A rule or check code in
    `warnings` means the live call would be refused with it: stop or adjust before sending. A refused
    quote (`wallet_frozen`, `agent_archived`, `agent_deleted`) means the account can do nothing.
 4. Create + persist the idempotency key and body, then send.
-5. Poll to a stable status, report `SUCCESS`/`REFUNDED`/`FAILED` with hashes; for `UNCERTAIN`
-   say "outcome pending" and keep observing.
+5. Poll to a stable status, report `SUCCESS`/`REFUNDED`/`FAILED` with hashes; report an amount
+   received (`amount_out`) only from `SUCCESS`; for `UNCERTAIN` say "outcome pending" and keep
+   observing.

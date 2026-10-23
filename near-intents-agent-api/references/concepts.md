@@ -32,8 +32,8 @@ agent account (1 per agent)
   It carries identity and expiry only. Revoke it to cut off that one actor.
 - **Freeze** stops everyone (policy `frozen: true`) and takes effect at once.
 
-When an execution is refused, the error code names the layer that refused it, and only that
-layer can lift it:
+When an execution is refused, the error code names what refused it and `layer` whose rule it was
+(`grant`, `policy`, `budget`, `balance`, …); only that layer can lift it:
 
 | Code | Layer | Who fixes it |
 |---|---|---|
@@ -48,10 +48,14 @@ layer can lift it:
 | `policy_denied` | provider-enforced policy (assets, per-asset limits, rate, …) | owner `policy_update` |
 | `policy_not_ready` | latest policy not yet in force | wait for the pending policy intent |
 
-A bigger USD budget never lifts a per-asset limit and a new grant never lifts a policy rule.
+A bigger USD budget never lifts a per-asset limit and a new grant never lifts a policy rule. A
+budget or limit refusal of an execution that runs now is a plain refusal: no operation, no `FAILED` status, no
+charge. A `FAILED` row is recorded only when a request loses a concurrent race, or a timelocked one is released over budget or a limit.
 
-`dry: true` swap quotes and withdrawal previews are never refused by the schedule, the USD budget,
-per-asset limits or `max_actions_per_hour`. Each one the live request would fail comes back in
+`dry: true` swap quotes and withdrawal previews are never refused by the account's rules (action,
+destination, assets, schedule, USD budget, per-asset limits, `max_actions_per_hour`) or the request's
+own checks (`unsupported_token`, `invalid_address`, `insufficient_balance`). Each one the live
+request would fail comes back in
 `warnings` under the code that request would get; only the live request is refused. A warning-free
 answer is a snapshot, not a guarantee: other work can use the budget first. A frozen account gets no
 quote: it is refused with `wallet_frozen`, as an archived or deleted one is with `agent_archived` or
@@ -125,7 +129,7 @@ with `approval_vote`; EVM and passkey votes are confirmed by the owner's `0s` wa
 - **Withdrawals** leave NEAR Intents to an external chain address. **Transfers** go to another
   NEAR Intents account (no bridge).
 - Swaps and withdrawals route through 1Click; `dry: true` returns its quote with `spend`, `fee` and
-  `warnings`, which lists any spending rule the live request would fail.
+  `warnings`, which lists any rule or check the live request would fail.
 - Each USD cap resets in full at the end of its period, counted from when the owner turned it on;
   moving funds to your own account on another chain or venue (your Hyperliquid or Polymarket
   address) counts like any withdrawal, and a deposit back does not credit it.

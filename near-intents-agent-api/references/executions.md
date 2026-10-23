@@ -29,14 +29,16 @@ POST …/withdraw  { "asset": "<usdc>", "amount": "5000000", "chain": "base", "r
                               | "policy_schedule_denied" | "spend_price_unavailable" | "spend_budget_exceeded"
                               | "policy_limit_exceeded" | "policy_action_limit_exceeded" | "policy_usage_unavailable"
                               | "unsupported_token" | "invalid_address" | "insufficient_balance",
-                        "detail": string, "available_at"?: string, "available_amount"?: string } ] }
+                        "detail": string, "available_at"?: string, "available_amount"?: string } ],
+        "owner_approval": boolean }   // true: the live request waits in PENDING_APPROVAL for the owner
 ```
 
 Dry runs charge no budget, reserve none and move nothing. A swap quote needs no grant and no
 idempotency key. A withdrawal preview needs the grant and an `Idempotency-Key`: the same key replays
 an identical preview for 60 s, an expired one needs a new key, and each agent gets 20 previews per
 rolling 24 h. Every preview that reaches the provider uses one, failed ones and ones carrying a rule
-warning included (`withdraw_preview_limit_reached`); a refusal the provider states before it quotes
+warning included (`withdraw_preview_limit_reached`, 429 with `meta.available_at` and `Retry-After` for
+when the oldest attempt leaves the window); a refusal the provider states before it quotes
 (e.g. `route_unavailable`) gives the attempt back, an outage does not. The `quote`
 object belongs to 1Click (amount out, fees, time estimate); treat its fields as informational
 and do not hard-code its shape. Use it to show the user expected output and to choose

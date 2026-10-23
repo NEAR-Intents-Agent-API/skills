@@ -71,9 +71,11 @@ Unknown fields are rejected (strict objects). Field names are snake_case.
 | `schedule` | weekly windows on the owner's clock when money actions may run (`only`) or are paused (`except`) | **API** |
 
 `budget` notes: charged atomically at dispatch using 1Click USD prices; an asset with no fresh
-price fails with `spend_price_unavailable` (only while a cap is on; with none on, nothing is counted and no price is read). A larger budget never
+price is refused with `spend_price_unavailable` (only while a cap is on; with none on, nothing is counted and no price is read). A larger budget never
 lifts a per-asset limit; both must pass. Live usage is in `GET …/policy` →
-`usage.budget.{daily,weekly,monthly}.{limit_usd, spent_usd, remaining_usd, resets_at}`. Each cap's
+`usage.budget.{daily,weekly,monthly}.{limit_usd, spent_usd, remaining_usd, resets_at}`. Over budget,
+a new execution that runs now is a plain refusal (`spend_budget_exceeded`): no operation, no `FAILED`
+status, no charge. `FAILED` is recorded only for a request that loses a concurrent race, or a timelocked one released over budget. Each cap's
 periods run from the moment the applied policy turned it on (daily: every 24 h from then, on at
 05:00 UTC → resets at 05:00 UTC; weekly: every 7 days; monthly: the same date and time each month in
 UTC, clamped to the last day of shorter months, Jan 31 → Feb 28 → Mar 31): `resets_at` is when the
@@ -91,8 +93,9 @@ agent, shared by every grant, at dispatch. Swaps, withdrawals, transfers, **shie
 all count; `near` and `nep141:wrap.near` share one count. Pending/uncertain actions count until
 settled; a completed one counts for the full window after completion; removing a limit keeps the
 usage. Over → `policy_limit_exceeded` / `policy_action_limit_exceeded` (403); earlier actions
-without a count → `policy_usage_unavailable` (409). Remaining per-asset allowance is not readable.
-Dry-run quotes and previews are not refused for these; they carry the same codes in `warnings`.
+without a count → `policy_usage_unavailable` (409). Remaining per-asset allowance is not readable. These are plain refusals of an execution that runs now (no
+operation, no `FAILED` status, no charge; a timelocked one is judged, and can end `FAILED`, when released). Dry-run quotes and previews are not refused for these;
+they carry the same codes in `warnings`.
 
 `destinations` notes:
 - `only` + `[]` (the safe default) keeps funds inside the account: swaps only.
@@ -109,8 +112,8 @@ Dry-run quotes and previews are not refused for these; they carry the same codes
   releases, and again at dispatch. A timelocked action whose release falls outside the schedule
   fails; nothing is sent.
 - Refusal: `403 policy_schedule_denied` with `meta.available_at` (next allowed moment) and
-  `Retry-After`. Submit again at `available_at` with a **new** `Idempotency-Key`, or the owner
-  changes `schedule`. A same-key replay returns the original operation, not a fresh judgement.
+  `Retry-After`. Nothing was recorded: submit the same request again at `available_at`, or the owner
+  changes `schedule`.
 - Exempt: deposits, `native` requests and owner approval votes.
 - Not sent to the provider: a schedule-only edit is an off-chain owner signature.
 

@@ -24,9 +24,11 @@ guide is `GET /llms.txt`. If this file and the server disagree, the server wins.
   until null. Policy history uses an integer cursor.
 - **Timeouts**: give settlement writes (non-dry swap/withdraw/transfer/shield/unshield) ~150 s,
   everything else ~65 s (long-poll is 30 s max). Don't retry on client timeout with a new key.
-- **Errors**: JSON:API `{ errors: [{ status, code, title, detail?, source?, meta? }], meta: { request_id } }`.
-  Branch on `errors[0].code`. `meta.retryable`, `meta.available_at`, `meta.min_amount` (on
-  `amount_too_low`, when the provider states it), and `Retry-After` header on 429/503. See
+- **Errors**: JSON:API `{ errors: [{ status, code, layer, title, detail?, source?, meta? }], meta: { request_id } }`.
+  Branch on `errors[0].code`; `layer` (`request|auth|grant|policy|budget|balance|provider|api`)
+  says whose rule refused. `meta.retryable`, `meta.available_at`, `meta.min_amount` (on
+  `amount_too_low`, when the provider states it), `meta.available_amount` (on
+  `insufficient_balance`), and `Retry-After` header on 429/503. See
   [errors.md](errors.md).
 
 ## Endpoint catalogue
@@ -113,10 +115,13 @@ the same key for 10 minutes, then reads `NEEDS_REVIEW` (`native_request_unconfir
 `dry: true` on swap/withdraw → 200 `{ dry: true, type, quote, spend, fee, warnings }`. A swap quote
 needs no grant and no idempotency key; a withdrawal preview needs both (same key replays it for
 60 s; 20 per agent per rolling 24 h, failures included: `withdraw_preview_limit_reached`). The
-spending rules (schedule, USD budget, per-asset limits, `max_actions_per_hour`) never refuse either:
-each one the live request would fail is a `warnings[]` entry whose `code` is that request's error
-code (`policy_schedule_denied` also carries `available_at`). A preview that reaches the provider uses
-one of the 20 even when it carries such a warning. An archived, deleted or frozen account gets no
+account's rules (action, destination, assets, schedule, USD budget, per-asset limits,
+`max_actions_per_hour`) and the request's own checks (`unsupported_token`, `invalid_address`,
+`insufficient_balance`) never refuse either: each one the live request would fail is a `warnings[]`
+entry whose `code` is that request's error code (`policy_schedule_denied` also carries
+`available_at`, `insufficient_balance` carries `available_amount`). A preview that reaches the provider uses
+one of the 20 even when it carries such a warning; a refusal the provider states before it quotes
+gives the attempt back. An archived, deleted or frozen account gets no
 quote: a swap quote and a withdrawal preview are both refused with 409 `agent_archived`,
 `agent_deleted` or `wallet_frozen`, reach no provider and use no attempt. A warning-free answer is
 a snapshot, not a reservation. Shape and details: [executions.md](executions.md).
@@ -183,7 +188,10 @@ PolicyView = {
   }
 }
 
-BalanceEntry = { asset_id, symbol, decimals, blockchain, price, …, balance_raw: string, balance: string | null }
+BalanceEntry = { asset_id, symbol, decimals, blockchain, price, …, balance_raw: string, balance: string | null,
+                 available_raw: string, available: string | null }
+// available = balance less queued/timelocked work not yet dispatched (dispatched work is already in
+// balance); read it instead of computing it. Deletion previews keep the old shape, without `available`.
 
 GrantView = { grant_id, agent_id, wallet_id, label, issued_at, expires_at,
               revoked_at, revoked_reason, owner_epoch, owner_message }

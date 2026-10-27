@@ -193,8 +193,9 @@ PolicyView = {
 
 BalanceEntry = { asset_id, symbol, decimals, blockchain, price, …, balance_raw: string, balance: string | null,
                  available_raw: string, available: string | null }
-// available = balance less queued/timelocked work not yet dispatched (dispatched work is already in
-// balance); read it instead of computing it. Deletion previews keep the old shape, without `available`.
+// available = balance less queued/timelocked work not yet dispatched (dispatched work leaves the
+// balance a few seconds after dispatch, when the provider's balance reflects it); read it instead
+// of computing it. Deletion previews keep the old shape, without `available`.
 
 GrantView = { grant_id, agent_id, wallet_id, label, issued_at, expires_at,
               revoked_at, revoked_reason, owner_epoch, owner_message }

@@ -82,13 +82,14 @@ What the rest of the answer holds:
   resets_at }` as `usage.budget` on `GET …/policy`, before this request; every field is `null` for
   an uncapped window.
 - `fee`: `{ amount_usd, percent }` or `null`. A swap compares the input's value with the quoted
-  output's value at current prices. A withdrawal is valued only on chain `near`, from the
-  provider's `estimated_fee` when it is zero or its `fee_token` is the withdrawn asset, otherwise
-  from `amount` minus `quote.amount_out` (on NEAR the route delivers the withdrawn asset itself).
-  A withdrawal to any other chain is always `null`: its `quote.amount_out` is in the destination
-  chain's asset, which the preview does not name, so compare `amount` with `amount_out` yourself.
-- `warnings`: `high_fee` when the route keeps more than 5%, judged only where `fee` is valued
-  (never for a bridged withdrawal); `asset_delivered_as_is` when a
+  output's value at current prices. A withdrawal on chain `near` is valued from the provider's
+  `estimated_fee` when it is zero or its `fee_token` is the withdrawn asset, otherwise from
+  `amount` minus `quote.amount_out` (on NEAR the route delivers the withdrawn asset itself). A
+  withdrawal to another chain delivers the asset of the same symbol 1Click lists there and is
+  valued from `amount` minus `quote.amount_out` in that asset; `null` when the quote states no
+  `amount_out` (a public withdrawal's preview) or the chain lists no single asset of that symbol.
+- `warnings`: `high_fee` when the route keeps more than 5%, judged only where `fee` is valued;
+  `asset_delivered_as_is` when a
   non-USDC asset is withdrawn to chain `hypercore`: it lands in HyperCore spot as that asset, not as
   USDC perps margin. Swap to USDC first to fund perps. Any rule or check code (above) means the live
   request would be refused with it. Show `detail` to the user.

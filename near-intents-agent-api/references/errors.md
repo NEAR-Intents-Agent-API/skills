@@ -99,6 +99,8 @@ Every error is a JSON:API document:
 | `signer_mismatch`, `owner_proof_invalid`, `policy_delegate_signature_invalid` | `auth` | 401/409 | wrong key or altered bytes (see [signing.md](signing.md)) |
 | `owner_key_not_full_access` | `auth` | 403 | NEAR owner must sign with a FullAccess key |
 | `owner_nonce_invalid` | `auth` | 409 | intent used/expired → regenerate |
+| `owner_command_stale` | `auth` | 409 | signed for an earlier owner state, or the signature of a deletion that was later restored → generate a new intent and sign again |
+| `deletion_assets_remaining` | `balance` | 409 | `agent_delete`: the wallet holds a public or confidential balance, including funds that arrived since the owner signed (the API reads the balances again right before committing; an unreadable balance there is `provider_unavailable`). Nothing was retired; a failure at that final read is recorded `failed` and the agent stays archived and restorable → withdraw the funds, then delete again |
 | `intent_generation_recovery_required` | `api` | 409 | retry `generate-intent` with the same idempotency key |
 | `policy_revision_conflict` | `policy` | 409 | re-read policy, regenerate with new `expected_revision`, re-sign |
 | `policy_reconciliation_required` | `policy` | 409 | another policy intent still open → wait |
@@ -126,19 +128,22 @@ Every error is a JSON:API document:
 | **Disabled** | | | |
 | `transparency_log_disabled` | `api` | 501 | this deployment keeps no transparency log; operation proofs are unavailable |
 
-**Dry runs warn with the live codes.** Neither the account's rules nor the request's own checks
-refuse a swap quote or withdrawal preview (`dry: true`): it returns `200`. Each one the live request
-would fail is a `warnings[]` entry whose `code` is the live code: `policy_action_denied`,
-`policy_destination_denied`, `policy_asset_denied`, `policy_schedule_denied` (with `available_at`),
-`spend_price_unavailable`, `spend_budget_exceeded`, `policy_limit_exceeded`,
-`policy_action_limit_exceeded`, `policy_usage_unavailable`, `unsupported_token`, `invalid_address`
-or `insufficient_balance` (with `available_amount`), with the same meaning and the same layer to
-change. Such a code in `warnings` means the live request will be refused with it: tell the user,
-reduce the amount, wait, or ask the owner to change the policy. A withdrawal preview uses one of the
-20 daily preview attempts every time it reaches the provider, rule warning or not; a refusal the
-provider states before it quotes (e.g. `route_unavailable`) gives the attempt back, an outage does not. An archived, deleted or frozen account gets
-no quote: a swap quote and a withdrawal preview are both refused with 409 `agent_archived`,
-`agent_deleted` or `wallet_frozen`, reach no provider and use no preview attempt.
+**Dry runs warn with the live codes.** The account's rules do not refuse a swap quote or withdrawal
+preview (`dry: true`): it returns `200`. Each one the live request would fail is a `warnings[]` entry
+whose `code` is the live code: `policy_action_denied`, `policy_destination_denied`,
+`policy_asset_denied`, `policy_schedule_denied` (with `available_at`), `spend_price_unavailable`,
+`spend_budget_exceeded`, `policy_limit_exceeded`, `policy_action_limit_exceeded`,
+`policy_usage_unavailable` or `insufficient_balance` (with `available_amount`), with the same meaning
+and the same layer to change. Such a code in `warnings` means the live request will be refused with
+it: tell the user, reduce the amount, wait, or ask the owner to change the policy. An asset
+`GET /v1/tokens` does not list (`unsupported_token`) or an invalid recipient (`invalid_address`)
+refuses the quote itself with 400, before any provider call, and uses no preview attempt. A
+withdrawal preview that reaches the provider uses one of the 20 daily preview attempts, rule warning
+or not. A provider refusal (e.g. `route_unavailable`), an outage and an uncertain attempt stay
+counted; only an answer the provider gives before running anything (its rate limiter's 429,
+`wallet_busy`, `provider_limit_reached`) gives the attempt back. An archived, deleted or frozen
+account gets no quote: a swap quote and a withdrawal preview are both refused with 409
+`agent_archived`, `agent_deleted` or `wallet_frozen`, reach no provider and use no preview attempt.
 
 ## Retry rules
 
@@ -173,8 +178,9 @@ no quote: a swap quote and a withdrawal preview are both refused with 409 `agent
 
 ## Wrapping errors in your code
 
-TypeScript SDK: `AgentApiError { status, code, title, detail, retryable, availableAt, minAmount,
-requestId, errors, idempotencyKey, layer, availableAmount }` (raw HTTP: `errors[0].layer`, `errors[0].meta.available_amount`) (`minAmount` from SDK 0.7; earlier versions read
+TypeScript SDK: `AgentApiError { status, code, title, detail, retryable, availableAt, retryAfterSeconds,
+minAmount, requestId, errors, idempotencyKey, layer, availableAmount }` (raw HTTP: `errors[0].layer`, `errors[0].meta.available_amount`,
+the `Retry-After` header; `retryAfterSeconds` from SDK 0.7.2 is that header in whole seconds, set when the response sent one; `minAmount` from SDK 0.7; earlier versions read
 `errors[0].meta.min_amount`); transport failures throw `AgentApiRequestError { idempotencyKey }`.
 The Python/Rust assets mirror this (`AgentApiError.code`, `.available_at`, …; Rust
 `Error::Api { … }` with `error.code()`).

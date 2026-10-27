@@ -28,7 +28,7 @@ POST …/withdraw  { "asset": "<usdc>", "amount": "5000000", "chain": "base", "r
                               | "policy_action_denied" | "policy_destination_denied" | "policy_asset_denied"
                               | "policy_schedule_denied" | "spend_price_unavailable" | "spend_budget_exceeded"
                               | "policy_limit_exceeded" | "policy_action_limit_exceeded" | "policy_usage_unavailable"
-                              | "unsupported_token" | "invalid_address" | "insufficient_balance",
+                              | "insufficient_balance",
                         "detail": string, "available_at"?: string, "available_amount"?: string } ],
         "owner_approval": boolean }   // true: the live request waits in PENDING_APPROVAL for the owner
 ```
@@ -36,25 +36,31 @@ POST …/withdraw  { "asset": "<usdc>", "amount": "5000000", "chain": "base", "r
 Dry runs charge no budget, reserve none and move nothing. A swap quote needs no grant and no
 idempotency key. A withdrawal preview needs the grant and an `Idempotency-Key`: the same key replays
 an identical preview for 60 s, an expired one needs a new key, and each agent gets 20 previews per
-rolling 24 h. Every preview that reaches the provider uses one, failed ones and ones carrying a rule
-warning included (`withdraw_preview_limit_reached`, 429 with `meta.available_at` and `Retry-After` for
-when the oldest attempt leaves the window); a refusal the provider states before it quotes
-(e.g. `route_unavailable`) gives the attempt back, an outage does not. The `quote`
+rolling 24 h. Every preview that reaches the provider uses one, ones carrying a rule warning included
+(`withdraw_preview_limit_reached`, 429 with `meta.available_at` and `Retry-After` for when the oldest
+attempt leaves the window). A provider refusal (e.g. `route_unavailable`), an outage and an uncertain
+attempt stay counted; only an answer the provider gives before running anything (its rate limiter's
+429, `wallet_busy`, `provider_limit_reached`) gives the attempt back, and the same key may try again. The `quote`
 object belongs to 1Click (amount out, fees, time estimate); treat its fields as informational
 and do not hard-code its shape. Use it to show the user expected output and to choose
 `min_amount_out` (minimum output).
 
-**Dry runs report the rules and checks, they are not refused by them.** A quote or preview on a usable
-account always goes to 1Click and returns `200`. It also checks what the live request would face: the
+**Dry runs report the rules, they are not refused by them.** A quote or preview on a usable
+account goes to 1Click and returns `200`. It also checks what the live request would face: the
 policy's action switch and destination rule, `assets`, the schedule at the time the request would run
-(after `timelock_ms`), the USD budget, per-asset limits and `max_actions_per_hour`, then the request's
-own checks. Each one it would fail is a `warnings` entry whose `code` is the code the live request
+(after `timelock_ms`), the USD budget, per-asset limits and `max_actions_per_hour`, then the balance.
+Each one it would fail is a `warnings` entry whose `code` is the code the live request
 would get (`policy_action_denied`, `policy_destination_denied`, `policy_asset_denied`,
 `policy_schedule_denied`, `spend_price_unavailable`, `spend_budget_exceeded`, `policy_limit_exceeded`,
-`policy_action_limit_exceeded`, `policy_usage_unavailable`, `unsupported_token`, `invalid_address`,
-`insufficient_balance`). `policy_schedule_denied` also carries `available_at`, when the schedule next
+`policy_action_limit_exceeded`, `policy_usage_unavailable`, `insufficient_balance`).
+`policy_schedule_denied` also carries `available_at`, when the schedule next
 allows it; `insufficient_balance` carries `available_amount`, what the balance can still spend (atomic
 units). Only the live request is refused with these codes.
+
+The request's own checks refuse the quote itself. An asset `GET /v1/tokens` does not list
+(`unsupported_token`) or a recipient that is not a valid address (`invalid_address`) is a 400, as it
+is for the live request: no quote can answer it. It is refused before any provider call and uses no
+preview attempt.
 
 An archived, deleted or frozen account gets no quote: an account that can do nothing has no use for
 one. A swap quote and a withdrawal preview are both refused with 409 `agent_archived`,
@@ -73,11 +79,13 @@ What the rest of the answer holds:
 - `spend.amount_usd`: what the budget would count for this request; `null` when it is uncounted or
   unpriced.
 - `spend.budget`: `{ daily, weekly, monthly }`, each `{ limit_usd, spent_usd, remaining_usd,
-  resets_at }` as `usage.budget` on `GET …/policy`, before this request.
+  resets_at }` as `usage.budget` on `GET …/policy`, before this request; every field is `null` for
+  an uncapped window.
 - `fee`: `{ amount_usd, percent }` or `null`. A swap compares the input's value with the quoted
   output's value at current prices. A withdrawal is valued only on chain `near`, from the
-  provider's `estimated_fee` when it is zero or its `fee_token` is the withdrawn asset. A
-  withdrawal to any other chain is always `null`: its `quote.amount_out` is in the destination
+  provider's `estimated_fee` when it is zero or its `fee_token` is the withdrawn asset, otherwise
+  from `amount` minus `quote.amount_out` (on NEAR the route delivers the withdrawn asset itself).
+  A withdrawal to any other chain is always `null`: its `quote.amount_out` is in the destination
   chain's asset, which the preview does not name, so compare `amount` with `amount_out` yourself.
 - `warnings`: `high_fee` when the route keeps more than 5%, judged only where `fee` is valued
   (never for a bridged withdrawal); `asset_delivered_as_is` when a

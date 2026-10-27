@@ -114,17 +114,20 @@ the same key for 10 minutes, then reads `NEEDS_REVIEW` (`native_request_unconfir
 
 `dry: true` on swap/withdraw → 200 `{ dry: true, type, quote, spend, fee, warnings }`. A swap quote
 needs no grant and no idempotency key; a withdrawal preview needs both (same key replays it for
-60 s; 20 per agent per rolling 24 h, failures included: `withdraw_preview_limit_reached`). The
+60 s; 20 per agent per rolling 24 h: `withdraw_preview_limit_reached`). The
 account's rules (action, destination, assets, schedule, USD budget, per-asset limits,
-`max_actions_per_hour`) and the request's own checks (`unsupported_token`, `invalid_address`,
-`insufficient_balance`) never refuse either: each one the live request would fail is a `warnings[]`
-entry whose `code` is that request's error code (`policy_schedule_denied` also carries
-`available_at`, `insufficient_balance` carries `available_amount`). A preview that reaches the provider uses
-one of the 20 even when it carries such a warning; a refusal the provider states before it quotes
-gives the attempt back. An archived, deleted or frozen account gets no
-quote: a swap quote and a withdrawal preview are both refused with 409 `agent_archived`,
-`agent_deleted` or `wallet_frozen`, reach no provider and use no attempt. A warning-free answer is
-a snapshot, not a reservation. Shape and details: [executions.md](executions.md).
+`max_actions_per_hour`) and `insufficient_balance` never refuse either: each one the live request
+would fail is a `warnings[]` entry whose `code` is that request's error code
+(`policy_schedule_denied` also carries `available_at`, `insufficient_balance` carries
+`available_amount`). An asset `GET /v1/tokens` does not list (`unsupported_token`) or an invalid
+recipient (`invalid_address`) refuses the quote itself with 400, before any provider call and
+without using an attempt. A preview that reaches the provider uses one of the 20 even when it
+carries a warning. A provider refusal (e.g. `route_unavailable`), an outage and an uncertain
+attempt stay counted; only an answer the provider gives before running anything (its rate
+limiter's 429, `wallet_busy`, `provider_limit_reached`) gives the attempt back. An archived,
+deleted or frozen account gets no quote: a swap quote and a withdrawal preview are both refused
+with 409 `agent_archived`, `agent_deleted` or `wallet_frozen`, reach no provider and use no
+attempt. A warning-free answer is a snapshot, not a reservation. Shape and details: [executions.md](executions.md).
 
 ## Core shapes
 
@@ -183,7 +186,7 @@ PolicyView = {
   provider_policy_synced: boolean,         // in force only when APPLIED && true
   cooldowns, policy: Policy | null,
   usage: {
-    budget: { daily|weekly|monthly: { limit_usd, spent_usd, remaining_usd, resets_at } },  // resets_at = end of the current period
+    budget: { daily|weekly|monthly: { limit_usd, spent_usd, remaining_usd, resets_at } },  // resets_at = end of the current period; all null when uncapped
     timelock: { delay_ms, scheduled_count }
   }
 }

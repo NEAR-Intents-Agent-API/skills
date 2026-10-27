@@ -154,9 +154,9 @@ Idempotency-Key: swap_9a1e…
 ```
 
 `dry: true` returns `{dry: true, type: "swap", quote, spend, fee, warnings}` (no key, no grant needed).
-Neither the account's rules nor the request's own checks refuse it. `spend` shows what the budget would count and what is left, `fee`
+The account's rules do not refuse it; an unlisted asset or invalid recipient does (400). `spend` shows what the budget would count and what is left, `fee`
 the share the route keeps, `warnings` any `high_fee` plus each rule the live swap would fail
-(policy, schedule, USD budget, limits, unsupported token, balance) under the code the live swap would get. A frozen, archived or deleted
+(policy, schedule, USD budget, limits, balance) under the code the live swap would get. A frozen, archived or deleted
 account gets no quote: `wallet_frozen`, `agent_archived` or `agent_deleted`. Drop `dry` to execute:
 you get `202` with a `StatusResponse` (`op_…`). Poll it to a terminal status. See [executions.md](executions.md) and [status-and-recovery.md](status-and-recovery.md).
 

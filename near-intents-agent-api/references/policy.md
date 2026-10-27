@@ -10,8 +10,8 @@ Policy = {
   actions: ("swap" | "transfer" | "withdraw")[],          // unique; deposits are always allowed
   confidential: boolean,                                  // shield/unshield + confidential form of each action
   owner_approval: boolean,                                // every outgoing money action waits for the owner's vote
-  assets: "any" | string[],                               // asset_id values, ≤128
-  limits: {                                               // per-asset caps, atomic strings (1–78 digits)
+  assets: "any" | string[],                               // asset_id values, ≤128; "*" is refused, use "any"
+  limits: {                                               // per-asset caps, atomic strings (1–78 digits); keys are asset_ids, never "*"
     per_transaction?: Record<asset_id, string>,
     hourly?:          Record<asset_id, string>,
     daily?:           Record<asset_id, string>,
@@ -62,7 +62,7 @@ Unknown fields are rejected (strict objects). Field names are snake_case.
 | `actions` | which money actions exist at all. Missing → `policy_action_denied` | provider |
 | `confidential` | enables `shield`, `unshield`, and `confidential: true` on swap/withdraw/transfer | provider |
 | `owner_approval` | outgoing actions go `PENDING_APPROVAL` until the owner votes; deposits unaffected. Hard limits still reject first | provider |
-| `assets` | tokens the agent may spend (`"any"` or explicit ids). Swaps may buy unlisted tokens but not sell them | provider |
+| `assets` | tokens the agent may spend (`"any"` or explicit ids; `"*"` is not an asset id and is refused with `validation_failed`, here and as a `limits` key). Swaps may buy unlisted tokens but not sell them | provider |
 | `limits` | per-asset caps per transaction and per rolling hour/day/month. Needs named assets to be meaningful | provider; windows also **API** |
 | `max_actions_per_hour` | rate cap on money actions regardless of amount | provider and **API** |
 | `destinations` | where withdrawals/transfers may go | **API** |
@@ -73,7 +73,8 @@ Unknown fields are rejected (strict objects). Field names are snake_case.
 `budget` notes: charged atomically at dispatch using 1Click USD prices; an asset with no fresh
 price is refused with `spend_price_unavailable` (only while a cap is on; with none on, nothing is counted and no price is read). A larger budget never
 lifts a per-asset limit; both must pass. Live usage is in `GET …/policy` →
-`usage.budget.{daily,weekly,monthly}.{limit_usd, spent_usd, remaining_usd, resets_at}`. Over budget,
+`usage.budget.{daily,weekly,monthly}.{limit_usd, spent_usd, remaining_usd, resets_at}`, all `null`
+for an uncapped window, which counts nothing. Over budget,
 a new execution that runs now is a plain refusal (`spend_budget_exceeded`): no operation, no `FAILED`
 status, no charge. `FAILED` is recorded only for a request that loses a concurrent race, or a timelocked one released over budget. Each cap's
 periods run from the moment the applied policy turned it on (daily: every 24 h from then, on at
@@ -100,7 +101,11 @@ they carry the same codes in `warnings`.
 `destinations` notes:
 - `only` + `[]` (the safe default) keeps funds inside the account: swaps only.
 - `only` matches the **exact** entry, memo included. `except` blocks an account under any memo.
-- EVM addresses must be canonical lowercase hex; other chains keep their exact case.
+- EVM addresses (including `hyperevm`, `adi` and `hood`) must be lowercase hex in the entry.
+- `only` and `except` compare addresses in canonical form: bech32 and bech32m (`btc`, `ltc`, Cardano
+  `addr1`, Zcash `zs1`/`u1`, `aleo`) and Bitcoin Cash CashAddr are lowercase, with or without
+  `bitcoincash:`; `starknet`, `sui`, `aptos` and `movement` hex is lowercase and zero-padded to
+  64 digits. Base58 addresses keep their exact case.
 - `transfer` entries are NEAR Intents account ids (`alice.near`, implicit hex accounts).
 
 `schedule` notes:

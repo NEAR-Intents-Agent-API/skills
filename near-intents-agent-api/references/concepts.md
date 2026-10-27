@@ -53,10 +53,12 @@ budget or limit refusal of an execution that runs now is a plain refusal: no ope
 charge. A `FAILED` row is recorded only when a request loses a concurrent race, or a timelocked one is released over budget or a limit.
 
 `dry: true` swap quotes and withdrawal previews are never refused by the account's rules (action,
-destination, assets, schedule, USD budget, per-asset limits, `max_actions_per_hour`) or the request's
-own checks (`unsupported_token`, `invalid_address`, `insufficient_balance`). Each one the live
+destination, assets, schedule, USD budget, per-asset limits, `max_actions_per_hour`) or by the
+balance (`insufficient_balance`). Each one the live
 request would fail comes back in
-`warnings` under the code that request would get; only the live request is refused. A warning-free
+`warnings` under the code that request would get; only the live request is refused. An unlisted
+asset or an invalid recipient (`unsupported_token`, `invalid_address`) refuses the quote itself, before
+any provider call. A warning-free
 answer is a snapshot, not a guarantee: other work can use the budget first. A frozen account gets no
 quote: it is refused with `wallet_frozen`, as an archived or deleted one is with `agent_archived` or
 `agent_deleted`.

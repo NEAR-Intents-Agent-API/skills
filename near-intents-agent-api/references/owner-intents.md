@@ -21,7 +21,7 @@ The API builds the exact bytes, so the partner never assembles anything security
 | `agent_freeze` | — | emergency stop; immediate; never throttled |
 | `agent_unfreeze` | — | own cooldown (`agent_unfreeze_throttled`) |
 | `agent_archive` / `agent_restore` | — | hides/unhides from default lists; nothing changes on chain. `agent_archive` needs a frozen account, and `agent_restore` needs an unfrozen one; otherwise `pause_before_archive` / `unpause_before_restore` |
-| `agent_delete` | — | `preview.deletion` lists balances and `assets_lost`; withdraw first, there is no sweep. Open deposit addresses never block it: deletion closes them (`agent_deleted`), and funds sent later are lost |
+| `agent_delete` | — | `preview.deletion` lists balances and `assets_lost`; withdraw first, there is no sweep. Any public or confidential balance refuses it (`deletion_assets_remaining`), whatever the preview showed when the owner signed. The API reads the balances again right before it commits: funds that arrived since fail the deletion with `deletion_assets_remaining`, an unreadable balance with `provider_unavailable`. Both are recorded `failed`, nothing is retired and the agent stays archived and restorable. A signature from a deletion that was later restored is refused with `owner_command_stale`: sign again. Open deposit addresses never block it: deletion closes them (`agent_deleted`), and funds sent later are lost |
 | `grant_issue` | `label`, `credential` (sha256 hex of token), `expires_at` (≤365 days) | see [grants.md](grants.md) |
 | `grant_revoke` | `grant_id` | committed operations still finish |
 | `execution_cancel` | `correlation_id` of a `QUEUED` op | only while the timelock holds it |
@@ -138,6 +138,8 @@ Adapt to your wallet library's result shape (near-connect / wallet-selector retu
 | `signer_mismatch` | wrong key/account signed → have the `signer` wallet sign |
 | `owner_key_not_full_access` (403) | NEAR key is a function-call key → use a FullAccess key |
 | `owner_nonce_invalid` | intent already used/expired → generate again |
+| `owner_command_stale` (409) | the intent was signed for an earlier owner state, or is the signature of a deletion that was later restored → generate again and sign again |
+| `deletion_assets_remaining` (409) | `agent_delete`: the wallet still holds a public or confidential balance → withdraw it, then delete again |
 | `policy_revision_conflict` (409) | re-read `GET …/policy`, regenerate with its `revision`, re-sign |
 | `policy_reconciliation_required` | another policy intent is still open → wait for it to settle/expire |
 | `policy_change_throttled` / `agent_unfreeze_throttled` (429) | wait until `meta.available_at` (also on `GET /v1/agents/{id}` cooldowns) |

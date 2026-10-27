@@ -87,10 +87,12 @@ owner signs ──► agent_create (policy) ──► grant_issue (token commitm
    optional `memo`, and `refund_to` (the agent's own balance).
 4. **Act** — `POST /v1/agents/{agent_id}/swap|transfer|withdraw|shield|unshield` with
    `X-API-Key`, `X-Grant-Token`, `Idempotency-Key`. Quote first with `dry: true`: a swap quote needs only `X-API-Key`; a withdrawal preview needs
-   the grant and a key, like the withdrawal (20 per agent per rolling 24 h). Neither the account's
-   rules nor the request's own checks (unsupported token, invalid address, balance) refuse a quote: it
+   the grant and a key, like the withdrawal (20 per agent per rolling 24 h; a provider refusal, an
+   outage or an uncertain attempt stays counted). The account's rules do not refuse a quote: it
    returns `spend`, `fee` and `warnings`, and each rule the live call would fail is a warning under
-   that call's error code (`insufficient_balance` adds `available_amount`). Read `warnings`
+   that call's error code (`insufficient_balance` adds `available_amount`). An unlisted asset or an
+   invalid recipient refuses the quote itself (`unsupported_token`, `invalid_address`), before any
+   provider call and without using an attempt. Read `warnings`
    before executing. An archived, deleted or frozen account gets no quote: it is refused with the
    code the live request gets (`agent_archived`, `agent_deleted`, `wallet_frozen`).
 5. **Observe** — `GET /v1/status?correlation_id=…&wait_ms=30000` until it stops moving.

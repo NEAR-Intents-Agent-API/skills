@@ -71,11 +71,13 @@ const agent = api.forGrant(token);                         // one client per gra
 const quote = await agent.swap(agentId, {
   origin_asset: "nep141:wrap.near", destination_asset: usdc, amount: "1000000000000000000000000", dry: true,
 });                                                          // QuoteResponse, no key: { dry, type, quote, spend, fee, warnings }
-// Never refused by the account's rules or the request's own checks: quote.warnings lists each one the live swap
+// Never refused by the account's rules: quote.warnings lists each one the live swap
 // would fail under its code (spend_budget_exceeded, policy_schedule_denied + available_at,
 // insufficient_balance + available_amount, …). Check it before the real swap.
+// An unlisted asset or an invalid recipient throws unsupported_token or invalid_address (400), before any provider call.
 // A frozen, archived or deleted account gets no quote: it throws wallet_frozen, agent_archived or agent_deleted.
-// withdraw(…, { dry: true }) is the same shape but needs the grant and a key, and uses one of 20 daily attempts.
+// withdraw(…, { dry: true }) is the same shape but needs the grant and a key, and uses one of 20 daily attempts
+// (a provider refusal, an outage or an uncertain attempt stays counted).
 
 const idempotencyKey = createIdempotencyKey();               // persist with the body first
 const op = await agent.swap(agentId, { origin_asset: "nep141:wrap.near", destination_asset: usdc, amount }, { idempotencyKey });
@@ -153,7 +155,8 @@ try {
       case "policy_change_throttled":   /* error.availableAt */ break;
       default:
         // error.layer: "request" | "auth" | "grant" | "policy" | "budget" | "balance" | "provider" | "api"
-        // policy/budget → ask the owner; balance → fund or send less; provider + error.retryable → same key later;
+        // policy/budget → ask the owner; balance → fund or send less; error.retryable → same key after error.availableAt,
+        // else after error.retryAfterSeconds (the Retry-After header in whole seconds, SDK 0.7.2);
         // request → fix the request
         throw error;
     }

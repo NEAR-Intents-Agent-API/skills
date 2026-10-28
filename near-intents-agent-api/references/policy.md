@@ -138,8 +138,8 @@ Omit it and every native method is off. A policy update replaces the whole polic
 | `evm.sign_transaction: true` | `evm/sign-transaction` | any EVM transaction (one serialized unsigned EIP-2718 or EIP-155 transaction for `chain`; anything else is `validation_failed`) |
 | `solana.sign_message` / `solana.sign_transaction` | `solana/sign-message` / `solana/sign-transaction` | Solana message / transaction (`sign-transaction` takes one legacy or v0 transaction message; anything else is `validation_failed`) |
 
-- **The switch is the whole fence.** `destinations`, `budget`, `timelock_ms`, `schedule` and
-  `owner_approval` do not apply. A native NEAR transfer can go anywhere; a typed-data signature
+- **The switch is the whole fence.** Native methods are for advanced users and are not protected
+  by the policy: `destinations`, `budget`, `timelock_ms`, `schedule` and `owner_approval` do not apply. A native NEAR transfer can go anywhere; a typed-data signature
   (a permit, a `TransferWithAuthorization`) or a signed transaction can move everything at that
   EVM or Solana address. Warn the owner before they sign it on; prefer `sign_typed_data` with
   narrow domains over `sign_transaction`.

@@ -114,7 +114,7 @@ the same key for 10 minutes, then reads `NEEDS_REVIEW` (`native_request_unconfir
 
 `dry: true` on swap/withdraw → 200 `{ dry: true, type, quote, spend, fee, warnings }`. A swap quote
 needs no grant and no idempotency key; a withdrawal preview needs both (same key replays it for
-60 s; 20 per agent per rolling 24 h: `withdraw_preview_limit_reached`). The
+60 s; no API cap, the provider's 100 custody operations per day apply). The
 account's rules (action, destination, assets, schedule, USD budget, per-asset limits,
 `max_actions_per_hour`) and `insufficient_balance` never refuse either: each one the live request
 would fail is a `warnings[]` entry whose `code` is that request's error code

@@ -137,13 +137,11 @@ whose `code` is the live code: `policy_action_denied`, `policy_destination_denie
 and the same layer to change. Such a code in `warnings` means the live request will be refused with
 it: tell the user, reduce the amount, wait, or ask the owner to change the policy. An asset
 `GET /v1/tokens` does not list (`unsupported_token`) or an invalid recipient (`invalid_address`)
-refuses the quote itself with 400, before any provider call, and uses no preview attempt. A
-withdrawal preview that reaches the provider uses one of the 20 daily preview attempts, rule warning
-or not. A provider refusal (e.g. `route_unavailable`), an outage and an uncertain attempt stay
-counted; only an answer the provider gives before running anything (its rate limiter's 429,
-`wallet_busy`, `provider_limit_reached`) gives the attempt back. An archived, deleted or frozen
+refuses the quote itself with 400, before any provider call. A
+withdrawal preview that reaches the provider counts toward the wallet's 100 daily custody
+operations, rule warning or not. An archived, deleted or frozen
 account gets no quote: a swap quote and a withdrawal preview are both refused with 409
-`agent_archived`, `agent_deleted` or `wallet_frozen`, reach no provider and use no preview attempt.
+`agent_archived`, `agent_deleted` or `wallet_frozen`, reach no provider.
 
 ## Retry rules
 

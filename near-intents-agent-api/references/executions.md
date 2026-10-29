@@ -35,12 +35,9 @@ POST …/withdraw  { "asset": "<usdc>", "amount": "5000000", "chain": "base", "r
 
 Dry runs charge no budget, reserve none and move nothing. A swap quote needs no grant and no
 idempotency key. A withdrawal preview needs the grant and an `Idempotency-Key`: the same key replays
-an identical preview for 60 s, an expired one needs a new key, and each agent gets 20 previews per
-rolling 24 h. Every preview that reaches the provider uses one, ones carrying a rule warning included
-(`withdraw_preview_limit_reached`, 429 with `meta.available_at` and `Retry-After` for when the oldest
-attempt leaves the window). A provider refusal (e.g. `route_unavailable`), an outage and an uncertain
-attempt stay counted; only an answer the provider gives before running anything (its rate limiter's
-429, `wallet_busy`, `provider_limit_reached`) gives the attempt back, and the same key may try again. The `quote`
+an identical preview for 60 s, an expired one needs a new key. The API sets no preview cap: every preview that
+reaches the provider counts toward the wallet's 100 custody operations per rolling 24 h
+(`provider_limit_reached` when spent). The `quote`
 object belongs to 1Click (amount out, fees, time estimate); treat its fields as informational
 and do not hard-code its shape. Use it to show the user expected output and to choose
 `min_amount_out` (minimum output).
@@ -59,13 +56,11 @@ units). Only the live request is refused with these codes.
 
 The request's own checks refuse the quote itself. An asset `GET /v1/tokens` does not list
 (`unsupported_token`) or a recipient that is not a valid address (`invalid_address`) is a 400, as it
-is for the live request: no quote can answer it. It is refused before any provider call and uses no
-preview attempt.
+is for the live request: no quote can answer it. It is refused before any provider call.
 
 An archived, deleted or frozen account gets no quote: an account that can do nothing has no use for
 one. A swap quote and a withdrawal preview are both refused with 409 `agent_archived`,
-`agent_deleted` or `wallet_frozen`, the code the live request gets. The refusal reaches no provider
-and uses no preview attempt.
+`agent_deleted` or `wallet_frozen`, the code the live request gets. The refusal reaches no provider.
 
 Before executing, read `warnings`. A rule or check code there means the live request will be refused
 with that code: tell the user, reduce the amount, wait (until the exceeded cap's

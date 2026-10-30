@@ -58,12 +58,13 @@ Every error is a JSON:API document:
 | `invalid_json`, `invalid_cursor` | `request` | 400 | fix the request |
 | `idempotency_key_required` | `request` | 400 | add `Idempotency-Key` |
 | `idempotency_conflict` | `request` | 409 | same key used with a different body; resend original body or use a new key for a genuinely new request |
-| `rate_limited` | `api` | 429 | wait `Retry-After`, retry the same request |
+| `rate_limited` | `api` | 429 | wait `Retry-After`, retry the same request. Every attempt counts against its key, refused ones too, so a retry loop keeps its own key limited; only attempts within the key's allowance count against the tenant |
 | `database_busy` | `api` | 503 | retryable; may have taken effect → retry with the **same** idempotency key, never a new one |
 | **Refusals (layer named; only that layer can lift it)** | | | |
 | `agent_grant_required` | `grant` | 403 | missing/revoked/expired/foreign grant → issue a grant or use the right token |
 | `policy_action_denied` | `policy` | 403 | action (or confidential form) not in policy → owner `policy_update` |
-| `policy_destination_denied` | `policy` | 403 | address not allowed → owner adds it to `destinations` |
+| `policy_transaction_limit_exceeded` | `policy` | 403 | amount above `limits.per_transaction` for the asset it spends (native NEAR and wNEAR share one cap). Plain refusal, nothing recorded → send less, or owner raises it |
+| `policy_destination_denied` | `policy` | 403 | address not allowed → owner adds it to `destinations`. Native NEAR a `native/near/transfer` sends, or a `native/near/call` attaches as deposit, is judged as a `withdraw` on chain `near` |
 | `policy_schedule_denied` | `policy` | 403 | outside the owner's `schedule` when it would run (after the timelock); nothing recorded → submit the same request at `meta.available_at`, or owner changes `schedule` |
 | `spend_budget_exceeded` | `budget` | 403 | shared USD budget used up. A plain refusal for a request that runs now: no operation, no `FAILED` status, no charge (a timelocked one released over budget ends `FAILED`). Wait for the period to end (`usage.budget.*.resets_at`, or `spend.budget` on a dry run: the whole cap is back then) or owner raises cap, then send the request again |
 | `policy_limit_exceeded` | `policy` | 403 | the asset's hourly/daily/monthly limit would be passed (shield/unshield count too). Plain refusal, nothing recorded → wait for the window or owner raises it, then send again |
@@ -88,8 +89,8 @@ Every error is a JSON:API document:
 | `deposit_quota_exceeded` | `api` | 429 | 100 deposit addresses / 24 h for this agent → wait `available_at` |
 | **Provider (wallet service/1Click) state** | | | |
 | `provider_unavailable` | `provider` | 503 | the provider or the quote service behind it did not answer → read `/v1/network` (`one_click`). With `meta.retryable`: same request, same key, after `Retry-After`. Without it the refusal is recorded (nothing submitted): new key once the provider is ok |
-| `provider_limit_reached` | `provider` | 429 | custody provider's daily quota for this wallet: 100 operations / rolling 24 h, `dry` previews included, quotes not; nothing sent → new work at `available_at` (don't burn the quota on repeated previews) |
-| `provider_rate_limited` | `provider` | 429 | reads: wait `Retry-After`, same request; executions: recorded refusal → new key after a short wait |
+| `provider_limit_reached` | `provider` | 429 | custody provider's daily quota for this wallet: 1,000 operations / rolling 24 h, `dry` previews included, quotes not; nothing sent → new work at `available_at` (don't burn the quota on repeated previews) |
+| `provider_rate_limited` | `provider` | 429 | a provider's rate limiter refused before running; nothing sent; always `Retry-After: 10`. With `meta.retryable` (reads, and calls that took a key): same request, same key, after it. Without it the refusal is recorded → new key after the wait |
 | `provider_refused` | `provider` | 409 (400 on a deposit quote) | the provider refused these terms; on a quote `detail` quotes 1Click's reason. Nothing sent or charged, repeating won't help → change the request, new key |
 | `provider_response_invalid`, `provider_request_mismatch` | `provider` | 502 | treat outcome as unknown → poll status of the same id |
 | **Owner intents** | | | |
@@ -128,18 +129,24 @@ Every error is a JSON:API document:
 | **Disabled** | | | |
 | `transparency_log_disabled` | `api` | 501 | this deployment keeps no transparency log; operation proofs are unavailable |
 
+**Native NEAR outcomes are statuses, not HTTP errors.** A `native/near/transfer` or `native/near/call` reads
+`SUCCESS` only once two RPC operators agree NEAR finalized a transaction that is exactly the request;
+until then `PROCESSING`. A finalized failure is `FAILED` with `native_transaction_failed` and the chain's reason (never resent). A transaction that is not the request is `NEEDS_REVIEW` with
+`native_transaction_mismatch`; one NEAR still does not know 30 minutes after dispatch is `NEEDS_REVIEW` with
+`native_transaction_unconfirmed`. Stop and review those; see [status-and-recovery.md](status-and-recovery.md).
+
 **Dry runs warn with the live codes.** The account's rules do not refuse a swap quote or withdrawal
 preview (`dry: true`): it returns `200`. Each one the live request would fail is a `warnings[]` entry
 whose `code` is the live code: `policy_action_denied`, `policy_destination_denied`,
-`policy_asset_denied`, `policy_schedule_denied` (with `available_at`), `spend_price_unavailable`,
+`policy_asset_denied`, `policy_transaction_limit_exceeded`, `policy_schedule_denied` (with `available_at`), `spend_price_unavailable`,
 `spend_budget_exceeded`, `policy_limit_exceeded`, `policy_action_limit_exceeded`,
 `policy_usage_unavailable` or `insufficient_balance` (with `available_amount`), with the same meaning
 and the same layer to change. Such a code in `warnings` means the live request will be refused with
 it: tell the user, reduce the amount, wait, or ask the owner to change the policy. An asset
 `GET /v1/tokens` does not list (`unsupported_token`) or an invalid recipient (`invalid_address`)
 refuses the quote itself with 400, before any provider call. A
-withdrawal preview that reaches the provider counts toward the wallet's 100 daily custody
-operations, rule warning or not. An archived, deleted or frozen
+withdrawal preview that reaches the provider counts toward the wallet's 1,000 custody
+operations per rolling 24 h, rule warning or not. An archived, deleted or frozen
 account gets no quote: a swap quote and a withdrawal preview are both refused with 409
 `agent_archived`, `agent_deleted` or `wallet_frozen`, reach no provider.
 

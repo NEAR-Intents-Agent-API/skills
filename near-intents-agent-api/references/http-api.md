@@ -44,6 +44,7 @@ guide is `GET /llms.txt`. If this file and the server disagree, the server wins.
 | `GET /openapi.json`, `GET /llms.txt`, `GET /health` | none | contract, guide, liveness |
 
 `status.components[]`: `{ id: "one_click" | "custody" | "near", status: "operational" | "degraded" | "down" | "unknown", reason, affects[], since, checked_at }`.
+`near` also checks the `intents.near` balance view (`degraded`, `view_failing`); `custody` and `near` list `balances` in `affects`.
 Advisory only; the API never refuses a request because of it.
 
 ### Owner intents
@@ -108,26 +109,29 @@ Details: [owner-intents.md](owner-intents.md), signing: [signing.md](signing.md)
 EVM `chain`: `ethereum`, `polygon`, `base`, `arbitrum`, `optimism`, `bsc`, `avalanche`,
 `hyperevm`, `hood` (one address on all). `NativeSignature = { correlation_id, chain, account_id,
 signature }` (EVM `0x` 65-byte r‖s‖v; Solana base58). Signing never broadcasts. A NEAR transfer or
-call reads `SUCCESS` once settled with `details.tx_hash`; a lost provider answer is resent under
-the same key for 10 minutes, then reads `NEEDS_REVIEW` (`native_request_unconfirmed`). Rules:
-[policy.md](policy.md#native-accounts-native).
+call reads `SUCCESS` only once two RPC operators agree NEAR finalized the transaction in
+`details.tx_hash` and it is exactly the request; until then `PROCESSING`, whatever
+`details.provider_status` says. A finalized failure is `FAILED` (`native_transaction_failed`); a
+transaction that is not the request is `NEEDS_REVIEW` (`native_transaction_mismatch`), and one NEAR
+still does not know 30 minutes after dispatch is `NEEDS_REVIEW` (`native_transaction_unconfirmed`).
+A lost provider answer is resent under the same key for 10 minutes, then reads `NEEDS_REVIEW`
+(`native_request_unconfirmed`). Only the signing call returns a `signature`; status and history
+return `signature: null`, older records too. Rules: [policy.md](policy.md#native-accounts-native).
 
 `dry: true` on swap/withdraw → 200 `{ dry: true, type, quote, spend, fee, warnings }`. A swap quote
 needs no grant and no idempotency key; a withdrawal preview needs both (same key replays it for
-60 s; no API cap, the provider's 100 custody operations per day apply). The
+60 s; no API cap, the provider's 1,000 custody operations per rolling 24 h apply). The
 account's rules (action, destination, assets, schedule, USD budget, per-asset limits,
 `max_actions_per_hour`) and `insufficient_balance` never refuse either: each one the live request
 would fail is a `warnings[]` entry whose `code` is that request's error code
 (`policy_schedule_denied` also carries `available_at`, `insufficient_balance` carries
 `available_amount`). An asset `GET /v1/tokens` does not list (`unsupported_token`) or an invalid
 recipient (`invalid_address`) refuses the quote itself with 400, before any provider call and
-without using an attempt. A preview that reaches the provider uses one of the 20 even when it
-carries a warning. A provider refusal (e.g. `route_unavailable`), an outage and an uncertain
-attempt stay counted; only an answer the provider gives before running anything (its rate
-limiter's 429, `wallet_busy`, `provider_limit_reached`) gives the attempt back. An archived,
-deleted or frozen account gets no quote: a swap quote and a withdrawal preview are both refused
-with 409 `agent_archived`, `agent_deleted` or `wallet_frozen`, reach no provider and use no
-attempt. A warning-free answer is a snapshot, not a reservation. Shape and details: [executions.md](executions.md).
+without calling the provider. A preview that reaches the provider is one of the wallet's custody
+operations even when it carries a warning; one the provider fails drops its pending row, so the
+same key may try again. An archived, deleted or frozen account gets no quote: a swap quote and a
+withdrawal preview are both refused with 409 `agent_archived`, `agent_deleted` or `wallet_frozen`
+and reach no provider. A warning-free answer is a snapshot, not a reservation. Shape and details: [executions.md](executions.md).
 
 ## Core shapes
 
@@ -156,15 +160,15 @@ reads `PROCESSING`, with `details.provider_status` keeping the provider's own st
 
 | type | details |
 |---|---|
-| executions, `deposit`, `agent_delete` | `action`, `request?` (the request as admitted, in the request body's field names: optional `origin_asset`, `destination_asset`, `asset`, `amount`, `min_amount_out`, `chain`, `recipient`, `memo`, `confidential`; `confidential` is the balance it spends from, or for a deposit credits), `near_account_id?`, `provider_request_id?`, `chain?`, `execute_after?`, `delay_ms?`, `approval_id?`, `intent_hash?`, `tx_hash?`, `destination_tx_hash?`, `amount_out?`, `deposit_address?`, `memo?`, `min_amount?`, `min_amount_out?`, `expires_at?`, `refund_to?`, `refund_tx_hash?`, `failure_reason?`, `reason?` (NEEDS_REVIEW), `never_executed?`, `never_submitted?`, `settled_late?`, + provider fields |
+| executions, `deposit`, `agent_delete` | `action`, `request?` (the request as admitted, in the request body's field names: optional `origin_asset`, `destination_asset`, `asset`, `amount`, `min_amount_out`, `chain`, `recipient`, `memo`, `confidential`; `confidential` is the balance it spends from, or for a deposit credits), `near_account_id?`, `provider_request_id?`, `chain?`, `execute_after?`, `delay_ms?`, `approval_id?`, `intent_hash?`, `tx_hash?`, `destination_tx_hash?`, `amount_out?`, `deposit_address?`, `memo?`, `min_amount?`, `min_amount_out?`, `expires_at?`, `deposit_seen_at?` (deposit: first sighting of funds), `refund_to?`, `refund_tx_hash?`, `failure_reason?`, `reason?` (NEEDS_REVIEW), `never_executed?`, `never_submitted?`, `settled_late?`, + provider fields |
 | `agent_create` | `agent_id`, `revision`, `policy_hash`, `transaction_hash` |
-| `policy_update`, `agent_freeze`, `agent_unfreeze` | `revision`, `policy_hash`, `transaction_hash` (null for off-chain changes) |
+| `policy_update`, `agent_freeze`, `agent_unfreeze` | `revision`, `policy_hash`, `transaction_hash` (null when the revision applied without a blockchain transaction) |
 | `grant_issue` | `grant: GrantView \| null` |
 | `grant_revoke` | `grant_id`, `committed_correlation_ids`, `committed_truncated` |
 | `execution_cancel` | `cancelled_correlation_id` |
 | `agent_archive`, `agent_restore` | `archived` |
 | `approval_vote` | `approval_id`, `verdict` |
-| `native` | `method`, `chain`, `account_id`, `target`, `amount`, `method_name`, `primary_type`, `domain`, `message_json`, `request_sha256`, `signature`, `tx_hash`, `provider_request_id`, `provider_status`, `failure_reason`. `domain` (the matched EIP-712 domain, in the policy's spelling) and `message_json` (the signed `message` as canonical JSON, keys sorted, a string) are set for typed data, `null` otherwise |
+| `native` | `method`, `chain`, `account_id`, `target`, `amount`, `method_name`, `primary_type`, `domain`, `message_json`, `request_sha256`, `signature` (always `null` here), `tx_hash`, `provider_request_id`, `provider_status`, `failure_reason`. `domain` (the matched EIP-712 domain, in the policy's spelling) and `message_json` (the signed `message` as canonical JSON, keys sorted, a string) are set for typed data, `null` otherwise |
 
 Narrow on `type` before reading `details`.
 
@@ -182,7 +186,7 @@ AgentView = {
 
 PolicyView = {
   wallet_id, revision: int | null, policy_hash, status: "NONE" | "SIGNED" | "APPLIED" | "FAILED",
-  applied_at, transaction_hash,
+  applied_at, transaction_hash,             // null when applied without a blockchain transaction
   provider_policy_synced: boolean,         // in force only when APPLIED && true
   cooldowns, policy: Policy | null,
   usage: {

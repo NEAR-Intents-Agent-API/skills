@@ -21,7 +21,7 @@ The API builds the exact bytes, so the partner never assembles anything security
 | `agent_freeze` | — | emergency stop; immediate; never throttled |
 | `agent_unfreeze` | — | own cooldown (`agent_unfreeze_throttled`) |
 | `agent_archive` / `agent_restore` | — | hides/unhides from default lists; nothing changes on chain. `agent_archive` needs a frozen account, and `agent_restore` needs an unfrozen one; otherwise `pause_before_archive` / `unpause_before_restore` |
-| `agent_delete` | — | `preview.deletion` lists balances and `assets_lost`; withdraw first, there is no sweep. Any public or confidential balance refuses it (`deletion_assets_remaining`), whatever the preview showed when the owner signed. The API reads the balances again right before it commits: funds that arrived since fail the deletion with `deletion_assets_remaining`, an unreadable balance with `provider_unavailable`. Both are recorded `failed`, nothing is retired and the agent stays archived and restorable. A signature from a deletion that was later restored is refused with `owner_command_stale`: sign again. Open deposit addresses never block it: deletion closes them (`agent_deleted`), and funds sent later are lost |
+| `agent_delete` | — | `preview.deletion` lists balances and `assets_lost`; withdraw first, there is no sweep. It does not read the custody account's native NEAR (that goes to the sponsor, `beneficiary`) and does not inventory native accounts (native NEAR, EVM, Solana): tell the owner to move native funds first. Any public or confidential balance refuses it (`deletion_assets_remaining`), whatever the preview showed when the owner signed. The API reads the balances again right before it commits: funds that arrived since fail the deletion with `deletion_assets_remaining`, an unreadable balance with `provider_unavailable`. Both are recorded `failed`, nothing is retired and the agent stays archived and restorable. A signature from a deletion that was later restored is refused with `owner_command_stale`: sign again. Open deposit addresses never block it: deletion closes them (`agent_deleted`), and funds sent later are lost |
 | `grant_issue` | `label`, `credential` (sha256 hex of token), `expires_at` (≤365 days) | see [grants.md](grants.md) |
 | `grant_revoke` | `grant_id` | committed operations still finish |
 | `execution_cancel` | `correlation_id` of a `QUEUED` op | only while the timelock holds it |
@@ -40,7 +40,7 @@ The API builds the exact bytes, so the partner never assembles anything security
   preview: {
     summary: string,
     revision?, previous_revision?, policy_hash?, policy?,   // policy changes
-    deletion?: { near_account_id, beneficiary, native_balance, public[], confidential[], assets_lost, retirement },
+    deletion?: { near_account_id, beneficiary, public[], confidential[], assets_lost, retirement },
     approval?: { approval_id, request_type, request_hash, verdict }
   }
 }

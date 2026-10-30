@@ -76,15 +76,15 @@ const quote = await agent.swap(agentId, {
 // insufficient_balance + available_amount, …). Check it before the real swap.
 // An unlisted asset or an invalid recipient throws unsupported_token or invalid_address (400), before any provider call.
 // A frozen, archived or deleted account gets no quote: it throws wallet_frozen, agent_archived or agent_deleted.
-// withdraw(…, { dry: true }) is the same shape but needs the grant and a key, and uses one of 20 daily attempts
-// (a provider refusal, an outage or an uncertain attempt stays counted).
+// withdraw(…, { dry: true }) is the same shape but needs the grant and a key; a preview that reaches the
+// provider counts toward the wallet's 1,000 custody operations per rolling 24 h (swap quotes do not).
 
 const idempotencyKey = createIdempotencyKey();               // persist with the body first
 const op = await agent.swap(agentId, { origin_asset: "nep141:wrap.near", destination_asset: usdc, amount }, { idempotencyKey });
 // op: StatusResponseOf<"swap"> & { idempotencyKey }
 
 const deposit = await api.deposit(agentId, { origin_asset: usdcOnBase }, { idempotencyKey: createIdempotencyKey() });
-// deposit.details: deposit_address, memo?, min_amount, expires_at, refund_to
+// deposit.details: deposit_address, memo?, min_amount, expires_at, refund_to, deposit_seen_at? (SDK 0.7.3)
 ```
 
 Also: `withdraw`, `transfer`, `shield`, `unshield`, `recover(agentId, { correlation_id, request }, { idempotencyKey })`.
@@ -117,7 +117,7 @@ const sent = await agent.nativeNearTransfer(agentId, { to: "bob.near", amount: "
 
 Also `nativeNearCall`, `nativeEvmSignMessage`, `nativeEvmSignTransaction`,
 `nativeSolanaSignMessage`, `nativeSolanaSignTransaction`. Signing methods return the signature and
-never broadcast. For logins, the relying party verifies the NEP-413 signature over `message`,
+never broadcast, and only they return the signature: status and history show `signature: null`. `nativeNearTransfer` and `nativeNearCall` read `SUCCESS` only once NEAR finalizes the requested transaction (see [policy.md](policy.md#native-accounts-native)). For logins, the relying party verifies the NEP-413 signature over `message`,
 `nonce` and `recipient`, checks the nonce is the one it issued, and that `public_key` is a
 full-access key of `near_account_id`.
 

@@ -252,7 +252,7 @@ class AgentApi:
     ) -> dict[str, Any]:
         """Withdrawal preview: needs the grant and a key (a fresh one unless passed). The same key
         replays an identical preview for 60 s. The API sets no preview cap; each counts toward the
-        wallet's 100 custody operations per rolling 24 h."""
+        wallet's 1,000 custody operations per rolling 24 h."""
         return self._execute(
             agent_id, "withdraw", {**request, "dry": True}, idempotency_key or create_idempotency_key()
         )

@@ -63,7 +63,7 @@ Unknown fields are rejected (strict objects). Field names are snake_case.
 | `confidential` | enables `shield`, `unshield`, and `confidential: true` on swap/withdraw/transfer | provider |
 | `owner_approval` | outgoing actions go `PENDING_APPROVAL` until the owner votes; deposits unaffected. Hard limits still reject first | provider |
 | `assets` | tokens the agent may spend (`"any"` or explicit ids; `"*"` is not an asset id and is refused with `validation_failed`, here and as a `limits` key). Swaps may buy unlisted tokens but not sell them | provider |
-| `limits` | per-asset caps per transaction and per rolling hour/day/month. Needs named assets to be meaningful | provider; windows also **API** |
+| `limits` | per-asset caps per transaction and per rolling hour/day/month. Needs named assets to be meaningful | provider; per-transaction and windows also **API** |
 | `max_actions_per_hour` | rate cap on money actions regardless of amount | provider and **API** |
 | `destinations` | where withdrawals/transfers may go | **API** |
 | `budget` | total USD value across all assets per day / week / month, counted from when each cap was turned on; shared by every grant | **API** |
@@ -89,7 +89,8 @@ any withdrawal, and a deposit back does not credit it. Swap quotes and withdrawa
 (`dry: true`) charge nothing: they report the budget as `spend.budget` and warn with
 `spend_budget_exceeded` when the live request would be refused.
 
-`limits` notes: the API also counts hourly/daily/monthly limits and `max_actions_per_hour` per
+`limits` notes: the API refuses an amount above `per_transaction` with `policy_transaction_limit_exceeded` (403) before anything is
+recorded (native NEAR and wNEAR share one cap). It also counts hourly/daily/monthly limits and `max_actions_per_hour` per
 agent, shared by every grant, at dispatch. Swaps, withdrawals, transfers, **shield and unshield**
 all count; `near` and `nep141:wrap.near` share one count. Pending/uncertain actions count until
 settled; a completed one counts for the full window after completion; removing a limit keeps the
@@ -100,7 +101,11 @@ they carry the same codes in `warnings`.
 
 `destinations` notes:
 - `only` + `[]` (the safe default) keeps funds inside the account: swaps only.
-- `only` matches the **exact** entry, memo included. `except` blocks an account under any memo.
+- `only` matches the **exact** entry, memo included. `except` blocks a listed address by any route: transfers to it,
+  public or confidential, withdrawals to it on any chain under any memo, and native NEAR the agent's NEAR account sends it
+  (a withdrawal on chain `near`). It is best-effort: another encoding of the same account (TON raw or bounceable, XRP
+  X-address, Stellar M-address, Tron hex, BCH legacy) does not match and it cannot stop a payment through an intermediary.
+  Use `only` when it matters who receives.
 - EVM addresses (including `hyperevm`, `adi` and `hood`) must be lowercase hex in the entry.
 - `only` and `except` compare addresses in canonical form: bech32 and bech32m (`btc`, `ltc`, Cardano
   `addr1`, Zcash `zs1`/`u1`, `aleo`) and Bitcoin Cash CashAddr are lowercase, with or without
@@ -131,15 +136,17 @@ Omit it and every native method is off. A policy update replaces the whole polic
 | Switch | Route (`POST /v1/agents/{agent_id}/native/…`) | What it allows |
 |---|---|---|
 | `near.sign_message: ["app.example.com"]` | `near/sign-message` | NEP-413 message signing (site logins) for a listed recipient (NEAR account or domain) |
-| `near.transfer: true` | `near/transfer` (Idempotency-Key) | native NEAR from `near_account_id` to any account |
-| `near.call: ["app.example.near"]` | `near/call` (Idempotency-Key) | a function call on a listed contract |
+| `near.transfer: true` | `near/transfer` (Idempotency-Key) | native NEAR from `near_account_id` to an account `destinations` allows |
+| `near.call: ["app.example.near"]` | `near/call` (Idempotency-Key) | a function call on a listed contract; NEAR it attaches as `deposit` must go where `destinations` allows |
 | `evm.sign_typed_data: [domain, …]` | `evm/sign-typed-data` | EIP-712 v4 under a listed domain only, and only the entry's `primary_types` if it lists them |
 | `evm.sign_message: true` | `evm/sign-message` | EIP-191 message |
 | `evm.sign_transaction: true` | `evm/sign-transaction` | any EVM transaction (one serialized unsigned EIP-2718 or EIP-155 transaction for `chain`; anything else is `validation_failed`) |
 | `solana.sign_message` / `solana.sign_transaction` | `solana/sign-message` / `solana/sign-transaction` | Solana message / transaction (`sign-transaction` takes one legacy or v0 transaction message; anything else is `validation_failed`) |
 
-- **The switch is the whole fence.** Native methods are for advanced users and are not protected
-  by the policy: `destinations`, `budget`, `timelock_ms`, `schedule` and `owner_approval` do not apply. A native NEAR transfer can go anywhere; a typed-data signature
+- **The switch is the fence, with one money rule beside it.** Native methods are for advanced users and are not protected
+  by the rest of the policy. NEAR a transfer sends, or a call attaches as its deposit, must land where `destinations` allows,
+  judged as a `withdraw` on chain `near` to the receiving account (`policy_destination_denied`). `budget`, `timelock_ms`,
+  `schedule` and `owner_approval` do not apply: a call can move anything the listed contract holds for the agent, and a typed-data signature
   (a permit, a `TransferWithAuthorization`) or a signed transaction can move everything at that
   EVM or Solana address. Warn the owner before they sign it on; prefer `sign_typed_data` with
   narrow domains over `sign_transaction`.
@@ -172,8 +179,15 @@ Omit it and every native method is off. A policy update replaces the whole polic
   `403 signing_recipient_forbidden`.
 - The wallet provider treats native NEAR as wNEAR: a transfer or call deposit needs `assets` to
   allow `nep141:wrap.near` (or `any`) and stays within its `limits`.
-- Signing routes return the signature and never broadcast. NEAR transfer and call are sent by the
-  wallet provider and read like any execution (`GET /v1/status`, type `native`).
+- Signing routes return the signature and never broadcast. Only that call returns it: status and
+  history show `signature: null`, older records too. NEAR transfer and call are sent by the
+  wallet provider and read like any execution (`GET /v1/status`, type `native`), but `SUCCESS` waits
+  for NEAR: two RPC operators must agree the transaction in `details.tx_hash` is FINAL and is exactly the
+  request (agent's account, recipient or contract, amount, method, args, gas, deposit). Until then
+  `PROCESSING`, whatever `details.provider_status` says. A finalized failure is `FAILED`
+  (`native_transaction_failed`); a transaction that is not the request is `NEEDS_REVIEW`
+  (`native_transaction_mismatch`); one NEAR does not know 30 minutes after dispatch is `NEEDS_REVIEW`
+  (`native_transaction_unconfirmed`). Never resent.
 - A typed-data record (status and history, type `native`) also holds `details.domain` (the matched
   EIP-712 domain, in the policy's spelling) and `details.message_json` (the signed `message` as
   canonical JSON, keys sorted, a string); both are `null` for other native methods. A typed-data

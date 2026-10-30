@@ -26,7 +26,7 @@ POST …/withdraw  { "asset": "<usdc>", "amount": "5000000", "chain": "base", "r
         "fee": { "amount_usd": string, "percent": string } | null,
         "warnings": [ { "code": "high_fee" | "asset_delivered_as_is"
                               | "policy_action_denied" | "policy_destination_denied" | "policy_asset_denied"
-                              | "policy_schedule_denied" | "spend_price_unavailable" | "spend_budget_exceeded"
+                              | "policy_transaction_limit_exceeded" | "policy_schedule_denied" | "spend_price_unavailable" | "spend_budget_exceeded"
                               | "policy_limit_exceeded" | "policy_action_limit_exceeded" | "policy_usage_unavailable"
                               | "insufficient_balance",
                         "detail": string, "available_at"?: string, "available_amount"?: string } ],
@@ -36,19 +36,19 @@ POST …/withdraw  { "asset": "<usdc>", "amount": "5000000", "chain": "base", "r
 Dry runs charge no budget, reserve none and move nothing. A swap quote needs no grant and no
 idempotency key. A withdrawal preview needs the grant and an `Idempotency-Key`: the same key replays
 an identical preview for 60 s, an expired one needs a new key. The API sets no preview cap: every preview that
-reaches the provider counts toward the wallet's 100 custody operations per rolling 24 h
-(`provider_limit_reached` when spent). The `quote`
+reaches the provider counts toward the wallet's 1,000 custody operations per rolling 24 h
+(`provider_limit_reached` when spent; swap quotes do not count). The `quote`
 object belongs to 1Click (amount out, fees, time estimate); treat its fields as informational
 and do not hard-code its shape. Use it to show the user expected output and to choose
 `min_amount_out` (minimum output).
 
 **Dry runs report the rules, they are not refused by them.** A quote or preview on a usable
 account goes to 1Click and returns `200`. It also checks what the live request would face: the
-policy's action switch and destination rule, `assets`, the schedule at the time the request would run
+policy's action switch and destination rule, `assets`, `limits.per_transaction`, the schedule at the time the request would run
 (after `timelock_ms`), the USD budget, per-asset limits and `max_actions_per_hour`, then the balance.
 Each one it would fail is a `warnings` entry whose `code` is the code the live request
 would get (`policy_action_denied`, `policy_destination_denied`, `policy_asset_denied`,
-`policy_schedule_denied`, `spend_price_unavailable`, `spend_budget_exceeded`, `policy_limit_exceeded`,
+`policy_transaction_limit_exceeded`, `policy_schedule_denied`, `spend_price_unavailable`, `spend_budget_exceeded`, `policy_limit_exceeded`,
 `policy_action_limit_exceeded`, `policy_usage_unavailable`, `insufficient_balance`).
 `policy_schedule_denied` also carries `available_at`, when the schedule next
 allows it; `insufficient_balance` carries `available_amount`, what the balance can still spend (atomic
@@ -193,13 +193,17 @@ Idempotency-Key: dep:user123:<uuid>
 - There is **no `refund_to` request field**: refunds always go back to the agent account;
   `details.refund_to` reports where.
 - Response `PENDING_DEPOSIT` with `details.deposit_address` (send funds **only** there),
-  `details.memo` (include it if present), `details.min_amount`, `details.expires_at`.
+  `details.memo` (include it if present), `details.min_amount`, `details.expires_at`. Once funds are
+  seen, `details.deposit_seen_at` is set.
 - Then poll the `op_…` id: `PENDING_DEPOSIT` → `PROCESSING` → `SUCCESS`. Only deposits report
   `PENDING_DEPOSIT`.
 - Without `amount` an address stays open 3 days; with it, 24 h. Each lookup issues a new address.
 - An address still unpaid one day after `details.expires_at` ends `FAILED` with `deposit_expired`.
   A deposit with a known deposit tx or amount never expires; it stays open until 1Click settles or
   refunds it. A late payment is refunded to `details.refund_to`, so `deposit_expired` loses nothing.
+  A payment seen at an already expired address reopens the deposit (it drops `deposit_expired`)
+  until 1Click settles or refunds it; the settlement deadline runs from `details.deposit_seen_at`,
+  not from when the address was issued.
   A quote 1Click refuses in words the API does not map is `provider_refused` (400, `detail` quotes
   the reason); no address exists, so change the request and use a new key.
 - Quota: 100 deposit addresses per agent per rolling 24 h → `deposit_quota_exceeded` (429).

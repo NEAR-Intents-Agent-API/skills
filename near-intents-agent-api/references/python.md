@@ -100,6 +100,10 @@ except AgentApiRequestError as e:
 `AgentApiError` has `status`, `code`, `title`, `detail`, `retryable`, `available_at`,
 `request_id`, `errors`, `idempotency_key`.
 
+The native routes (`sign-intent`, `sign-in`, `sign-transfer`) have no wrapper in the asset: call
+`api.for_grant(token).request("POST", f"/v1/agents/{agent_id}/native/evm/sign-intent", body={"payload": payload}, grant=True)`
+([sign-intent.md](sign-intent.md)).
+
 ## Async / frameworks
 
 The asset uses a sync `httpx.Client`. For asyncio (FastAPI, aiohttp), switch to

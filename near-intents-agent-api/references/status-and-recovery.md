@@ -136,3 +136,8 @@ the origin yourself (`<API host>/log`, `api.agentsonintents.com/log` for the hos
 `dispatch_committed_at` is the point of no return. Before it, revoking the grant, revoking the
 API key or freezing refuses the operation. After it, the operation completes; `grant_revoke`
 details and API-key revocation list those committed ids.
+
+The same holds for signatures. A native signing route returns its signature to the caller, so
+revoking, freezing or deleting afterwards cannot recall it: a `sign-intent` payload signed before
+the freeze stays publishable by anyone who holds it until its own `deadline` (up to 300 s, or 96 h
+for a payload that pays only 1Click deposits), see [sign-intent.md](sign-intent.md).

@@ -30,7 +30,9 @@ agent account (1 per agent)
   grants draw on the same limits and USD budget.
 - **Grant = who.** A bearer credential (`ngt_…`) for one session, assistant, bot or device.
   It carries identity and expiry only. Revoke it to cut off that one actor.
-- **Freeze** stops everyone (policy `frozen: true`) and takes effect at once.
+- **Freeze** stops everyone (policy `frozen: true`) and takes effect at once. It refuses new
+  requests; it does not recall a `sign-intent` payload already signed, which stays publishable until
+  its deadline ([sign-intent.md](sign-intent.md)).
 
 When an execution is refused, the error code names what refused it and `layer` whose rule it was
 (`grant`, `policy`, `budget`, `balance`, …); only that layer can lift it:

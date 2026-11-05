@@ -94,4 +94,5 @@ holds the grant token in its environment; one grant per MCP client installation.
 - [ ] `NEEDS_REVIEW` alerts a human.
 - [ ] Mainnet writes behind explicit configuration flags in dev tooling.
 - [ ] Logs carry `request_id` and `correlation_id`, never secrets or signatures.
-- [ ] Freeze button available to the owner at all times (no cooldown on freeze).
+- [ ] Freeze button available to the owner at all times (no cooldown on freeze). It does not recall
+      a `sign-intent` payload already signed (publishable until its deadline, up to 96 h).

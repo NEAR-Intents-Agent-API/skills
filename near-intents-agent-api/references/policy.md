@@ -25,10 +25,17 @@ Policy = {
   native?: Native                                         // omit = every native method off
 }
 
-Native = {                                                // when present, every key is required
+Native = {                                                // when present, every key is required except sign_in, sign_intent, sign_transfer (omitted = off)
   near:   { sign_message: string[], transfer: boolean, call: string[] },   // 0–256 entries each: NEAR accounts (sign_message also takes domains)
-  evm:    { sign_typed_data: EvmTypedDataDomain[], sign_message: boolean, sign_transaction: boolean },
-  solana: { sign_message: boolean, sign_transaction: boolean },
+  evm:    { sign_typed_data: EvmTypedDataDomain[], sign_message: boolean, sign_intent?: SignIntentRules, sign_transaction: boolean },
+  solana: { sign_in?: string[], sign_message: boolean, sign_intent?: SignIntentRules, sign_transfer?: boolean, sign_transaction: boolean },
+}
+
+SignIntentRules = {                                       // present = on; see sign-intent.md
+  receivers: string[],                                    // 0–256 NEAR Intents accounts a signed transfer may pay
+  one_click_deposits: boolean,                            // also 1Click deposit addresses that pay the key or a receiver and refund the key
+  withdrawals?: { chain: string, address: string }[],     // also 1Click deposits paying out to these addresses on other chains (canonical spelling as in destinations, no memo)
+  max_slippage_bps?: number,                              // 0–300, default 100; slippage plus 1Click's own fee
 }
 
 EvmTypedDataDomain = {                                    // ≥1 domain field, 0–64 entries unique by domain
@@ -129,7 +136,8 @@ they carry the same codes in `warnings`.
 
 ## Native accounts (`native`)
 
-`native` lets every grant use the agent's own keys outside NEAR Intents, one method at a time.
+`native` lets every grant use the agent's own keys outside the agent account, one method at a time
+(`sign_intent` signs for each EVM or Solana key's own, separate NEAR Intents account).
 Omit it and every native method is off. A policy update replaces the whole policy, so leaving
 `native` out of an update turns it off.
 
@@ -141,7 +149,11 @@ Omit it and every native method is off. A policy update replaces the whole polic
 | `evm.sign_typed_data: [domain, …]` | `evm/sign-typed-data` | EIP-712 v4 under a listed domain only, and only the entry's `primary_types` if it lists them |
 | `evm.sign_message: true` | `evm/sign-message` | EIP-191 message |
 | `evm.sign_transaction: true` | `evm/sign-transaction` | any EVM transaction (one serialized unsigned EIP-2718 or EIP-155 transaction for `chain`; anything else is `validation_failed`) |
+| `evm.sign_intent: {…}` | `evm/sign-intent` | a NEAR Intents payload (`transfer` intents only) for the EVM key's own Intents account, under the rules in `SignIntentRules`; answers `signed_data` to publish |
 | `solana.sign_message` / `solana.sign_transaction` | `solana/sign-message` / `solana/sign-transaction` | Solana message / transaction (`sign-transaction` takes one legacy or v0 transaction message; anything else is `validation_failed`) |
+| `solana.sign_in: ["app.example"]` | `solana/sign-in` | Sign-In-With-Solana login for a listed domain; the API writes the message |
+| `solana.sign_intent: {…}` | `solana/sign-intent` | as `evm.sign_intent`, for the Solana key's own Intents account |
+| `solana.sign_transfer: true` | `solana/sign-transfer` | one SOL or SPL transfer to a recipient `destinations` allows as a `withdraw` on chain `sol`; amount not limited |
 
 - **The switch is the fence, with one money rule beside it.** Native methods are for advanced users and are not protected
   by the rest of the policy. NEAR a transfer sends, or a call attaches as its deposit, must land where `destinations` allows,
@@ -174,9 +186,22 @@ Omit it and every native method is off. A policy update replaces the whole polic
   tag, never a transaction or an intent. `recipient` is a NEAR account or domain (printable ASCII,
   ≤ 128), matched exactly against the list, no wildcard. The caller supplies the 32-byte `nonce`
   (base64); `callbackUrl` is not supported. The signature (base64) is verified before it returns.
-- `intents.near` and `intents.far` are never accepted: listing them is `validation_failed`, a
-  transfer or call to them `403 native_contract_forbidden`, a signature for them
-  `403 signing_recipient_forbidden`.
+- `intents.near` and `intents.far` are never accepted for the NEAR key: listing them is
+  `validation_failed`, a transfer or call to them `403 native_contract_forbidden`, a signature for
+  them `403 signing_recipient_forbidden`. The EVM and Solana keys sign for them only through
+  `sign-intent`; `evm/sign-message` and `solana/sign-message` refuse an Intents payload
+  (`intents_payload_use_sign_intent`).
+- **`sign_intent` has its own rules** and is not fenced by the rest of the policy. `receivers`,
+  `one_click_deposits`, `withdrawals` and `max_slippage_bps` alone decide who a signed transfer may
+  pay; `destinations`, `assets`, `limits`, `budget`, `timelock_ms`, `schedule` and `owner_approval`
+  do not apply, and no amount is limited. A deposit-only payload may be due up to 96 hours ahead,
+  anything else within 300 s. How to build, publish and troubleshoot it: [sign-intent.md](sign-intent.md).
+  List only accounts and addresses the owner controls in `receivers` and `withdrawals`.
+- `solana.sign_message` signs any bytes (32-byte digests included), which NEAR Intents accepts under
+  other signature standards: it amounts to full control of that key's Intents account. Prefer
+  `sign_in` (logins), `sign_transfer` (payments) or `sign_intent` (Intents). `sign_transfer`
+  signs one transfer and judges only the recipient against `destinations`; it does not limit the
+  amount.
 - The wallet provider treats native NEAR as wNEAR: a transfer or call deposit needs `assets` to
   allow `nep141:wrap.near` (or `any`) and stays within its `limits`.
 - Signing routes return the signature and never broadcast. Only that call returns it: status and
@@ -192,7 +217,10 @@ Omit it and every native method is off. A policy update replaces the whole polic
   EIP-712 domain, in the policy's spelling) and `details.message_json` (the signed `message` as
   canonical JSON, keys sorted, a string); both are `null` for other native methods. A typed-data
   `message` over 65536 bytes as canonical JSON is refused with `validation_failed`.
-- Freezing the account stops every native route. Changing `native` is an on-chain policy update.
+- Freezing the account stops every native route, but it cannot recall a signature already returned:
+  a `sign-intent` payload signed before the freeze stays publishable until its own deadline
+  (up to 300 s, or 96 h for a payload that pays only 1Click deposits). Changing `native` is an
+  on-chain policy update.
 - Addresses: `wallet.near_account_id`, `wallet.evm_account_id` (same on every EVM chain) and
   `wallet.solana_account_id`; the last two are null until the provider reports them.
 

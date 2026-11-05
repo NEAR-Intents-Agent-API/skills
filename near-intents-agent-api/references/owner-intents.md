@@ -163,7 +163,16 @@ poll GET …/policy until status APPLIED && provider_policy_synced
 ```
 
 **Emergency stop**: `agent_freeze` (no cooldown, takes effect at once). To stop one actor only,
-`grant_revoke`. To see what is still live: `GET …/containment`.
+`grant_revoke`. To see what is still live: `GET …/containment`. A freeze refuses new requests but
+cannot recall a signature already returned: a `sign-intent` payload signed earlier stays
+publishable until its deadline (up to 96 h for a 1Click deposit payload). Tell the owner so.
+
+**Enable `sign_intent` / `sign_transfer` / `sign_in`** (a `policy_update` that adds them to
+`native`): show the owner what each lets a grant do ([sign-intent.md](sign-intent.md#what-to-tell-the-owner)):
+`sign_intent` pays listed `receivers` (and 1Click deposits, with `one_click_deposits`/`withdrawals`)
+from the EVM or Solana key's own Intents account in any amount, outside `destinations`, limits,
+budget, timelock and approval; `sign_transfer` signs one Solana transfer to an allowed destination
+without an amount limit; `sign_in` signs a login for a listed domain only.
 
 **Cancel a timelocked payment**: list `GET …/executions/scheduled`, then `execution_cancel`
 with that `correlation_id` before `execute_after`.

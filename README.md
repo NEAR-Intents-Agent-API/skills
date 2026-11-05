@@ -102,6 +102,7 @@ near-intents-agent-api/
 │   ├── owner-intents.md         generate → sign → submit → status, BFF split, recipes
 │   ├── signing.md               nep413 / nep366 / eip712 / webauthn byte formats, per language
 │   ├── policy.md                every policy field, ready-made policies, cooldowns
+│   ├── sign-intent.md           sign-intent / sign-in / sign-transfer with the agent's EVM and Solana keys
 │   ├── grants.md                tokens, commitments, storage, revocation, patterns
 │   ├── executions.md            swap, withdraw, transfer, shield, deposit, quotes, chains
 │   ├── status-and-recovery.md   statuses, polling, idempotency, UNCERTAIN, /recover

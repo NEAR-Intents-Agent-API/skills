@@ -1,6 +1,6 @@
 ---
 name: near-intents-agent-api
-description: Build on the NEAR Intents Agent API (api.agentsonintents.com) in any language — TypeScript, Python, Rust, Go or plain HTTP. Use when integrating AI-agent wallets on NEAR Intents into an app or backend, when code mentions `naa_` API keys, `ngt_` grant tokens, `X-Grant-Token`, `generate-intent`/`submit-intent`, `@near-intents-agent-api/sdk`, owner-signed spending policies, agent swaps/transfers/withdrawals/deposits, or when someone wants an AI agent to hold and move funds under owner-set limits.
+description: Build on the NEAR Intents Agent API (api.agentsonintents.com) in any language — TypeScript, Python, Rust, Go or plain HTTP. Use when integrating AI-agent wallets on NEAR Intents into an app or backend, when code mentions `naa_` API keys, `ngt_` grant tokens, `X-Grant-Token`, `generate-intent`/`submit-intent`, `@near-intents-agent-api/sdk`, `sign-intent`/`sign-in`/`sign-transfer` native routes, owner-signed spending policies, agent swaps/transfers/withdrawals/deposits, or when someone wants an AI agent to hold and move funds under owner-set limits.
 ---
 
 # NEAR Intents Agent API
@@ -58,7 +58,12 @@ Follow these in every integration; most bugs and lost-fund incidents come from b
     tracking id, never an address.
 11. **One grant per session/assistant/bot.** Grants say *who* may act; the account policy says
     *what*. Revoke a grant to cut off one agent; `agent_freeze` stops everyone.
-12. **Show the owner the required risk notice.** Before the owner signs `agent_create`, show the
+12. **A returned signature cannot be recalled.** `agent_freeze` refuses new `native` requests, but a
+    `sign-intent` payload signed before it stays publishable by anyone who holds it until its own
+    deadline (300 s, or up to 96 h when it pays only 1Click deposits). Treat the payload like cash,
+    sign only what is due soon, and tell the owner. `sign-intent` has its own `receivers` rules; the
+    account's `destinations`, limits and budget do not apply ([references/sign-intent.md](references/sign-intent.md)).
+13. **Show the owner the required risk notice.** Before the owner signs `agent_create`, show the
     Owner Terms, OutLayer's terms and the notice, and keep evidence of acceptance. Show the notice
     again before the owner funds the wallet. For `agent_create`, `preview.summary` ends with it.
 
@@ -130,6 +135,7 @@ The Python and Rust signers are verified byte-for-byte against near-api-js and v
 | Issue, use, store, revoke grants | [references/grants.md](references/grants.md) |
 | Swap, transfer, withdraw, deposit, shield, quotes, chains | [references/executions.md](references/executions.md) |
 | Statuses, polling, idempotency, `UNCERTAIN`, `/recover`, operation proofs | [references/status-and-recovery.md](references/status-and-recovery.md) |
+| Sign NEAR Intents payloads, Solana logins or transfers with the agent's EVM/Solana key (`sign-intent`, `sign-in`, `sign-transfer`) | [references/sign-intent.md](references/sign-intent.md) |
 | Handle an error code | [references/errors.md](references/errors.md) |
 | Design the integration (data model, AI tools, key ownership models, security) | [references/architecture.md](references/architecture.md) |
 | Find a runnable example for a flow | [references/examples.md](references/examples.md) |

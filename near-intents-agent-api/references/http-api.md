@@ -102,8 +102,12 @@ Details: [owner-intents.md](owner-intents.md), signing: [signing.md](signing.md)
 | `near/call` → 202, idem | `near.call` lists `receiver_id` | `receiver_id`, `method_name`, `args?` \| `args_base64?`, `gas?`, `deposit?` | `StatusResponse` |
 | `evm/sign-typed-data` → 200 | domain (and `primaryType`, if the entry lists `primary_types`) in `evm.sign_typed_data` | `chain`, `typed_data` (EIP-712 v4; `message` ≤ 65536 bytes as canonical JSON) | `NativeSignature` |
 | `evm/sign-message` → 200 | `evm.sign_message` | `chain`, `message`, `encoding?` | `NativeSignature` |
+| `evm/sign-intent` → 200 | `evm.sign_intent` | `payload` (string: exact canonical JSON text of a NEAR Intents payload, `transfer` intents only) | `NativeSignature` + `signed_data` |
 | `evm/sign-transaction` → 200 | `evm.sign_transaction` | `chain`, `unsigned_tx` (`0x` serialized unsigned EIP-2718 or EIP-155 transaction for `chain`) | `NativeSignature` |
+| `solana/sign-in` → 200 | `solana.sign_in` lists `domain` | `domain`, `nonce`, `issued_at`, `expiration_time`, `statement?`, `uri?`, `version?`, `chain_id?` | `NativeSignature` + `signed_message` |
 | `solana/sign-message` → 200 | `solana.sign_message` | `message`, `encoding?` (`utf8`/`hex`/`base64`) | `NativeSignature` |
+| `solana/sign-intent` → 200 | `solana.sign_intent` | `payload`, as `evm/sign-intent` | `NativeSignature` + `signed_data` |
+| `solana/sign-transfer` → 200 | `solana.sign_transfer`; `destinations` allows `recipient` | `unsigned_tx` (base64 legacy or v0 message making one SOL/SPL transfer), `recipient` | `NativeSignature` |
 | `solana/sign-transaction` → 200 | `solana.sign_transaction` | `unsigned_tx` (base64 legacy or v0 transaction message) | `NativeSignature` |
 
 EVM `chain`: `ethereum`, `polygon`, `base`, `arbitrum`, `optimism`, `bsc`, `avalanche`,
@@ -116,7 +120,9 @@ transaction that is not the request is `NEEDS_REVIEW` (`native_transaction_misma
 still does not know 30 minutes after dispatch is `NEEDS_REVIEW` (`native_transaction_unconfirmed`).
 A lost provider answer is resent under the same key for 10 minutes, then reads `NEEDS_REVIEW`
 (`native_request_unconfirmed`). Only the signing call returns a `signature`; status and history
-return `signature: null`, older records too. Rules: [policy.md](policy.md#native-accounts-native).
+return `signature: null`, older records too. Rules: [policy.md](policy.md#native-accounts-native);
+the `sign-intent`, `sign-in` and `sign-transfer` routes: [sign-intent.md](sign-intent.md). A freeze
+refuses new native requests but cannot recall a `sign-intent` payload already signed.
 
 `dry: true` on swap/withdraw → 200 `{ dry: true, type, quote, spend, fee, warnings }`. A swap quote
 needs no grant and no idempotency key; a withdrawal preview needs both (same key replays it for

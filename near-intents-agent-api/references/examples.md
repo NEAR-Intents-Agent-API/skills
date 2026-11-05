@@ -44,6 +44,10 @@ dedicated low-value owner account.
 | `07:evm-typed-data` | `07-native-accounts/03-evm-typed-data.ts` | EIP-712 under a listed domain, signer recovered; another domain refused |
 | `07:refusals` | `07-native-accounts/04-refusals.ts` | every native refusal, incl. `intents.near`/`intents.far` |
 | `07:disable-native` | `07-native-accounts/05-disable-native.ts` | remove one service or omit `native` entirely |
+| `07:enable-sign-intent` | `07-native-accounts/06-enable-sign-intent.ts` | owner sets `native.evm.sign_intent` (1Click deposits, optional Base withdrawal) |
+| `07:sign-intent-deposit` | `07-native-accounts/07-sign-intent-deposit.ts` | 1Click quote → `generate-intent` → `nativeEvmSignIntent` → `submit-intent` (dry by default, `AGENT_EXECUTE=true` to sign) |
+| `07:enable-solana` | `07-native-accounts/08-enable-solana.ts` | owner sets `solana.sign_in` and `solana.sign_transfer` |
+| `07:solana` | `07-native-accounts/09-solana-sign-in-and-transfer.ts` | Sign-In-With-Solana, then one SOL transfer signed, not broadcast |
 | `08:error-taxonomy` | `08-errors-and-recovery/01-error-taxonomy.ts` | real error documents |
 | `08:status-and-uncertain` | `08-errors-and-recovery/02-status-and-uncertain.ts` | classify a status; when recovery is legal |
 | `08:idempotency` | `08-errors-and-recovery/03-idempotency.ts` | replay with the same key |
@@ -60,6 +64,7 @@ NEP-413 + NEP-366), `support/evm-owner.ts` (EVM owner descriptor + EIP-712),
 `support/policy.ts` (policy builders), `support/destinations.ts`, `support/flow.ts`
 (generate → sign → submit → wait), `support/raw-http.ts` (fetch client with JSON:API errors),
 `support/identity.ts` (NEP-413 login requests and signature verification), `support/native.ts`
-(the `native` policy block).
+(the `native` policy block), `support/one-click.ts` (1Click quote, `generate-intent`,
+`submit-intent`, status) and `support/solana.ts` (a SOL transfer message for `sign-transfer`).
 
 Python and Rust equivalents of the client and signers ship with this skill in `assets/`.

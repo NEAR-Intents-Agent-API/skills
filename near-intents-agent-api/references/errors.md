@@ -64,7 +64,7 @@ Every error is a JSON:API document:
 | `agent_grant_required` | `grant` | 403 | missing/revoked/expired/foreign grant → issue a grant or use the right token |
 | `policy_action_denied` | `policy` | 403 | action (or confidential form) not in policy → owner `policy_update` |
 | `policy_transaction_limit_exceeded` | `policy` | 403 | amount above `limits.per_transaction` for the asset it spends (native NEAR and wNEAR share one cap). Plain refusal, nothing recorded → send less, or owner raises it |
-| `policy_destination_denied` | `policy` | 403 | address not allowed → owner adds it to `destinations`. Native NEAR a `native/near/transfer` sends, or a `native/near/call` attaches as deposit, is judged as a `withdraw` on chain `near` |
+| `policy_destination_denied` | `policy` | 403 | address not allowed → owner adds it to `destinations`. Native NEAR a `native/near/transfer` sends, or a `native/near/call` attaches as deposit, is judged as a `withdraw` on chain `near`; a `solana/sign-transfer` recipient as a `withdraw` on chain `sol`. For `evm|solana/sign-intent` it is judged by `sign_intent` instead: **read `detail`** (unlisted receiver or withdrawal address → owner; a 1Click quote that is not `PENDING_DEPOSIT`, a wrong amount, a refund elsewhere, an extra fee or too much slippage → get a fresh quote, see [sign-intent.md](sign-intent.md)) |
 | `policy_schedule_denied` | `policy` | 403 | outside the owner's `schedule` when it would run (after the timelock); nothing recorded → submit the same request at `meta.available_at`, or owner changes `schedule` |
 | `spend_budget_exceeded` | `budget` | 403 | shared USD budget used up. A plain refusal for a request that runs now: no operation, no `FAILED` status, no charge (a timelocked one released over budget ends `FAILED`). Wait for the period to end (`usage.budget.*.resets_at`, or `spend.budget` on a dry run: the whole cap is back then) or owner raises cap, then send the request again |
 | `policy_limit_exceeded` | `policy` | 403 | the asset's hourly/daily/monthly limit would be passed (shield/unshield count too). Plain refusal, nothing recorded → wait for the window or owner raises it, then send again |
@@ -73,10 +73,18 @@ Every error is a JSON:API document:
 | `policy_denied` | `policy` | 409 | provider-side policy refused (asset, per-asset limit, hourly rate, …) → owner `policy_update` |
 | `wallet_frozen` | `policy` | 409 | owner froze the account → only `agent_unfreeze` resumes |
 | `policy_not_ready` | `policy` | 409 | latest policy not yet in force → wait for the policy intent to settle |
-| `native_method_denied` | `policy` | 403 | the policy's `native` switch for this route is off, or the contract/domain is not listed, or the domain entry's `primary_types` omits the request's `primaryType` → owner `policy_update` |
+| `native_method_denied` | `policy` | 403 | the policy's `native` switch for this route is off (incl. `sign_intent`, `sign_in`, `sign_transfer`), or the contract/domain is not listed (incl. a Sign-In-With-Solana domain), or the domain entry's `primary_types` omits the request's `primaryType` → owner `policy_update` |
 | `native_contract_forbidden` | `policy` | 403 | native transfer to or call of `intents.near`/`intents.far`; never allowed |
 | `signing_policy_denied` | `policy` | 403 | `near/sign-message` recipient not in `native.near.sign_message` |
 | `signing_recipient_forbidden` | `policy` | 403 | `intents.near`/`intents.far` are never signing recipients |
+| `intents_type_forbidden` | `policy` | 403 | `sign-intent` payload holds an intent other than `transfer`; `source.pointer` names it → remove it |
+| `intents_contract_forbidden` | `policy` | 403 | `sign-intent` `verifying_contract` is not `intents.near`/`intents.far`, or a receiver is one of them |
+| `intents_signer_mismatch` | `request` | 403 | `sign-intent` `signer_id` is not the signing key's own Intents account (lowercase `0x` address, or hex of the Solana key) |
+| `intents_payload_invalid` | `request` | 400 | `sign-intent` `payload` is not the canonical `JSON.stringify` text of a payload, or a field is wrong (`source.pointer`) |
+| `intents_deadline_invalid` | `request` | 400 | `sign-intent` `deadline` not RFC 3339 UTC with `Z`, already past, or beyond 300 s (96 h for a payload that pays only 1Click deposits) |
+| `intents_payload_use_sign_intent` | `policy` | 403 | an Intents payload was sent to `evm/sign-message` or `solana/sign-message` → use `sign-intent` |
+| `solana_transaction_forbidden` | `policy` | 403 | `solana/sign-transfer` message is not exactly one allowed SOL/SPL transfer; `detail` says what to change |
+| `provider_signature_invalid` | `provider` | 502 | the wallet provider's signature did not verify against the agent's key and was discarded; nothing returned → ask again, report `request_id` if it repeats |
 | **Execution / routing** | | | |
 | `insufficient_balance` | `balance` | 400/409 | the balance the request spends from (public or confidential) holds less than it spends; nothing submitted or charged. `meta.available_amount` is what it can still spend → fund the account or send at most that. The API's own check is 400 with no history row; a provider refusal is 409 |
 | `amount_too_low` | `request` | 400 | below route minimum → quote at least `meta.min_amount` (atomic units of the asset sent) when present, else a larger amount |

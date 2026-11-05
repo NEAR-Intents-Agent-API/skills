@@ -116,7 +116,20 @@ const sent = await agent.nativeNearTransfer(agentId, { to: "bob.near", amount: "
 ```
 
 Also `nativeNearCall`, `nativeEvmSignMessage`, `nativeEvmSignTransaction`,
-`nativeSolanaSignMessage`, `nativeSolanaSignTransaction`. Signing methods return the signature and
+`nativeSolanaSignMessage`, `nativeSolanaSignTransaction`. SDK 0.7.4 adds
+`nativeEvmSignIntent` / `nativeSolanaSignIntent(agentId, { payload })` → `IntentSignature`
+(`signed_data` to publish as is), `nativeSolanaSignIn(agentId, SolanaSignInRequest)` →
+`SolanaSignIn` (adds `signed_message`) and `nativeSolanaSignTransfer(agentId, { unsigned_tx, recipient })`
+→ `NativeSignature`; policy types `SignIntentRules`, `EvmSignIntentRequest`,
+`SolanaSignIntentRequest`, `SolanaSignInRequest`, `SolanaSignTransferRequest`:
+
+```ts
+const payload = JSON.stringify({ signer_id, verifying_contract: "intents.near", deadline, nonce, intents }); // once, unchanged
+const { signed_data } = await agent.nativeEvmSignIntent(agentId, { payload });   // publish signed_data as is
+```
+
+Rules, 1Click deposit checks, refusals and the freeze caveat: [sign-intent.md](sign-intent.md).
+Signing methods return the signature and
 never broadcast, and only they return the signature: status and history show `signature: null`. `nativeNearTransfer` and `nativeNearCall` read `SUCCESS` only once NEAR finalizes the requested transaction (see [policy.md](policy.md#native-accounts-native)). For logins, the relying party verifies the NEP-413 signature over `message`,
 `nonce` and `recipient`, checks the nonce is the one it issued, and that `public_key` is a
 full-access key of `near_account_id`.
@@ -148,7 +161,7 @@ try {
 } catch (error) {
   if (error instanceof AgentApiError) {
     switch (error.code) {
-      case "policy_destination_denied": /* ask owner to allow the address */ break;
+      case "policy_destination_denied": /* ask owner to allow the address; for sign-intent read error.detail first (unlisted receiver vs a quote that failed the 1Click check) */ break;
       case "spend_budget_exceeded":     /* show remaining budget (a dry quote or preview warns with this code); nothing was recorded */ break;
       case "insufficient_balance":      /* fund, or send at most error.availableAmount (atomic units) */ break;
       case "policy_schedule_denied":    /* outside owner hours: same request at error.availableAt */ break;

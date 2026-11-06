@@ -18,7 +18,7 @@ Python 3.10+.
 from near_intents_agent_api import AgentApi, AgentApiError, AgentApiRequestError, create_idempotency_key
 
 api = AgentApi.from_env()                 # NEAR_INTENTS_AGENT_API_KEY, NEAR_INTENTS_AGENT_API_URL (default hosted)
-# or AgentApi(api_key="naa_…", base_url="https://api.agentsonintents.com")
+# or AgentApi(api_key="<partner API key>", base_url="https://api.agentsonintents.com")
 
 api.get_network(); api.whoami(); api.get_quotas()
 tokens = {t["asset_id"]: t for t in api.get_tokens()}

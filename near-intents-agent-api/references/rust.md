@@ -20,7 +20,7 @@ use near_intents_agent_api::{AgentApi, Error, create_idempotency_key};
 use serde_json::json;
 
 let api = AgentApi::from_env()?;                    // NEAR_INTENTS_AGENT_API_KEY, NEAR_INTENTS_AGENT_API_URL (default hosted)
-// or AgentApi::new("naa_…", None)?
+// or AgentApi::new("<partner API key>", None)?
 
 let network = api.get_network().await?;
 let tokens = api.get_tokens().await?;

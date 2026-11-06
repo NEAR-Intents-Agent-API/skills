@@ -4,9 +4,9 @@
 
 ```
 ┌──────────── browser / app ────────────┐        ┌──────────── your backend ────────────┐        ┌── NEAR Intents Agent API ──┐
-│ owner wallet (NEAR/EVM/passkey)       │        │ naa_ key (secret store)              │        │ api.agentsonintents.com   │
+│ owner wallet (NEAR/EVM/passkey)       │        │ partner API key (secret store)       │        │ api.agentsonintents.com   │
 │ shows preview, signs intent.payload   │◄──────►│ BFF routes: generate / submit / read │◄──────►│ policy, grants, dispatch  │
-│ never sees naa_ / ngt_                │        │ grant tokens (encrypted)             │        │ → agent wallet, 1Click   │
+│ never sees the key / ngt_             │        │ grant tokens (encrypted)             │        │ → agent wallet, 1Click   │
 └───────────────────────────────────────┘        │ AI agent runtime / tools             │        └───────────────────────────┘
                                                  │ jobs: status poller, network watch   │
                                                  └──────────────────────────────────────┘
@@ -48,7 +48,7 @@ exceed it; protect the owner key separately from the runtime that holds grant to
 
 ## Multi-tenant SaaS
 
-- One API key per environment; tag every agent with `external_user_id` = your user id and
+- One API key per environment (the portal allows 10 live keys per partner); tag every agent with `external_user_id` = your user id and
   filter with `GET /v1/agents?external_user_id=`.
 - Enforce in your BFF that a user can only generate/submit for their own agents and intents.
 - Default limits: 100 agents / 24 h per tenant, 100 deposit addresses / 24 h per agent; plan onboarding
@@ -82,8 +82,9 @@ holds the grant token in its environment; one grant per MCP client installation.
 
 ## Security checklist
 
-- [ ] `naa_` key only in server secret storage; separate keys per environment; rotate by
-      creating a new key, deploying, then revoking the old one.
+- [ ] Partner API key only in server secret storage; separate keys per environment. Keys expire
+      365 days after creation: rotate by creating a new key in the partner portal, deploying, then
+      revoking the old one there (a revoked key stops new dispatches at once).
 - [ ] Grant tokens encrypted at rest, never logged, never in prompts, URLs or client bundles.
 - [ ] One grant per actor; short expiry for sessions; revoke on logout/uninstall.
 - [ ] BFF checks user ↔ agent ↔ correlation_id ownership on every route.

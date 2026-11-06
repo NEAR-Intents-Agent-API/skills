@@ -93,7 +93,7 @@ What the rest of the answer holds:
 
 ```http
 POST /v1/agents/{agent_id}/swap
-X-API-Key: naa_…
+X-API-Key: <partner API key>
 X-Grant-Token: ngt_…
 Idempotency-Key: swap:user123:2026-10-07T10:00:00Z:7f3c
 Content-Type: application/json
@@ -180,7 +180,7 @@ action (`policy_limit_exceeded` / `policy_action_limit_exceeded`), even though n
 
 ```http
 POST /v1/agents/{agent_id}/deposit
-X-API-Key: naa_…
+X-API-Key: <partner API key>
 Idempotency-Key: dep:user123:<uuid>
 { "origin_asset": "<asset_id on the paying chain>", "amount": "25000000" }
 ```

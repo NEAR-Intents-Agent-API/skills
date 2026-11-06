@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Read-only smoke test for a NEAR Intents Agent API key. Moves no funds, changes nothing.
 #
-#   NEAR_INTENTS_AGENT_API_KEY=naa_... ./check_api.sh
-#   NEAR_INTENTS_AGENT_API_URL=https://api.agentsonintents.com NEAR_INTENTS_AGENT_API_KEY=naa_... ./check_api.sh
+#   NEAR_INTENTS_AGENT_API_KEY=<key from the partner portal> ./check_api.sh
+#   NEAR_INTENTS_AGENT_API_URL=https://api.agentsonintents.com NEAR_INTENTS_AGENT_API_KEY=<key> ./check_api.sh
+#
+# Create the key at https://partners.near-intents.org. The key is an opaque string: this script
+# only rejects an empty value or one with whitespace or quotes, never a format.
 #
 # Needs curl; uses jq for pretty output when installed.
 set -euo pipefail
@@ -38,16 +41,22 @@ call /v1/tokens
 echo "✓ tokens: $(echo "$BODY" | count asset_id) assets"
 
 if [[ -z "${NEAR_INTENTS_AGENT_API_KEY:-}" ]]; then
-  echo "! NEAR_INTENTS_AGENT_API_KEY not set: skipped authenticated checks (create a key in the partner dashboard)"
+  echo "! NEAR_INTENTS_AGENT_API_KEY not set: skipped authenticated checks (create a key in the partner portal)"
   exit 0
 fi
-if [[ ! "$NEAR_INTENTS_AGENT_API_KEY" =~ ^naa_[A-Za-z0-9_-]{43}$ ]]; then
-  echo "✗ NEAR_INTENTS_AGENT_API_KEY does not look like a naa_ key (check for quotes or whitespace)"; exit 1
+if [[ "$NEAR_INTENTS_AGENT_API_KEY" =~ [[:space:]\"\'] ]]; then
+  echo "✗ NEAR_INTENTS_AGENT_API_KEY contains whitespace or quotes (copy the key from the partner portal without them)"; exit 1
 fi
 
 call /v1/whoami "$NEAR_INTENTS_AGENT_API_KEY"
 if [[ "$STATUS" != 200 ]]; then
-  echo "✗ GET /v1/whoami → $STATUS"; echo "$BODY" | pretty '.errors[0] | {code, detail}'; exit 1
+  echo "✗ GET /v1/whoami → $STATUS"
+  if [[ "$STATUS" == 401 && "$BODY" == *'"api_key_retired"'* ]]; then
+    echo "  This key is retired (created before the partner portal). Create a new key in the partner portal the detail below names."
+  elif [[ "$STATUS" == 503 && "$BODY" == *'"key_verification_unavailable"'* ]]; then
+    echo "  The partner portal could not be reached to verify this key. Retry in a minute."
+  fi
+  echo "$BODY" | pretty '.errors[0] | {code, detail}'; exit 1
 fi
 echo "✓ key valid"; echo "$BODY" | pretty .
 

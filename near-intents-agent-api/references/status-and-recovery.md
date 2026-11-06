@@ -126,9 +126,13 @@ Automatic settlement stopped because something did not add up (e.g. evidence con
 retained audit event of one execution, each `PROVEN` with a `c2sp.org/tlog-proof@v1` against the
 notary-signed checkpoint of the API's transparency log, `PENDING` until the next checkpoint covers
 it, or `UNLOGGED`. Each event's `evidence` is the result it recorded, with any settlement
-transaction hashes, committed by the opening's `evidenceHash`. Use it to audit an execution offline without trusting the API; it does not
-change the execution's status. Check it with the SDK's `verifyOperationProof(proof, origin)`, pinning
-the origin yourself (`<API host>/log`, `api.agentsonintents.com/log` for the hosted API); see
+transaction hashes, committed by the opening's `evidenceHash`. Use it to audit an execution without trusting the API; it does not
+change the execution's status. Verification needs a trusted checkpoint: with SDK 0.8.0, fetch a
+fresh head using `fetchWitnessCheckpoint(apiUrl, origin, witnessPublicKey)`, request the proof
+with `?from_size=` set to that head's size, and call `verifyOperationProof(proof, origin, head)`.
+Pin the origin (`<API host>/log`, `api.agentsonintents.com/log` for the hosted API) and the
+witness key yourself, and never take either from an API response. A server behind the head
+answers `409 transparency_checkpoint_behind`: keep your trusted checkpoint, never reset it, and retry once the server has recovered. See
 [typescript.md](typescript.md#operation-proofs) and the examples' `11:verify-operation`.
 
 ## Revocation and freezing vs in-flight work

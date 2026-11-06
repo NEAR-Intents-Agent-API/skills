@@ -8,7 +8,7 @@ retries and no hidden state.
     pip install httpx cryptography          # client + NEAR signing
     pip install eth-account                 # only for EVM (EIP-712) owners
 
-Backend only: the API key (`naa_...`) and grant tokens (`ngt_...`) never go to a browser.
+Backend only: the partner API key and grant tokens (`ngt_...`) never go to a browser.
 
 Signing helpers (`sign_nep413`, `sign_nep366`, `sign_eip712`) exist for scripts, tests and
 server-held owner keys. In a real product the OWNER's wallet signs in the browser; your backend
@@ -32,7 +32,7 @@ from typing import Any, Iterable
 import httpx
 
 DEFAULT_BASE_URL = "https://api.agentsonintents.com"
-API_KEY_PATTERN = re.compile(r"^naa_[A-Za-z0-9_-]{43}$")
+API_KEY_INVALID = re.compile(r"[\s\"']")  # the key is opaque: only reject paste mistakes
 GRANT_TOKEN_PATTERN = re.compile(r"^ngt_[A-Za-z0-9_-]{43}$")
 SETTLEMENT_PATHS = ("/swap", "/withdraw", "/transfer", "/shield", "/unshield")
 STILL_MOVING = {"PROCESSING", "QUEUED"}
@@ -117,8 +117,8 @@ class AgentApi:
     _http: httpx.Client = field(default=None, repr=False)  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
-        if not API_KEY_PATTERN.match(self.api_key):
-            raise ValueError("api_key is not a naa_ key")
+        if not self.api_key or API_KEY_INVALID.search(self.api_key):
+            raise ValueError("api_key is empty or has whitespace or quotes")
         if self.grant_token is not None and not GRANT_TOKEN_PATTERN.match(self.grant_token):
             raise ValueError("grant_token is not an ngt_ token")
         self.base_url = self.base_url.rstrip("/")

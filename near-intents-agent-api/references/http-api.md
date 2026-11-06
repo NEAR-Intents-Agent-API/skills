@@ -11,7 +11,7 @@ guide is `GET /llms.txt`. If this file and the server disagree, the server wins.
 - **Headers**
   | Header | When |
   |---|---|
-  | `X-API-Key: naa_…` | every endpoint except `/v1/network`, `/v1/tokens` |
+  | `X-API-Key: <partner API key>` | every endpoint except `/v1/network`, `/v1/tokens` |
   | `X-Grant-Token: ngt_…` | swap, withdraw (including `dry: true` previews), transfer, shield, unshield, recover, every `native/…` route (not swap quotes, not deposit) |
   | `Idempotency-Key` | required on executions, withdrawal previews and deposit (not on swap quotes); optional on `generate-intent`. 8–128 chars `[A-Za-z0-9._:-]` |
   | `Content-Type: application/json` | every body |
@@ -41,7 +41,7 @@ guide is `GET /llms.txt`. If this file and the server disagree, the server wins.
 | `GET /v1/network` | none | `{ network: "mainnet", contract_id, supported_owner_types, status: { overall, checked_at, components[] } }` |
 | `GET /v1/tokens` | none | `{ data: [{ asset_id, symbol, decimals, blockchain, price, price_updated_at, price_expires_at }] }` |
 | `GET /v1/whoami` | key | `{ api_key_id, tenant_id }` |
-| `GET /v1/quotas` | key | `{ revision, overrides, limits: { daily_agents, api_keys, requests_per_minute, key_requests_per_minute }, usage: {…}, observed_at }` |
+| `GET /v1/quotas` | key | `{ revision, overrides, limits: { daily_agents, requests_per_minute, key_requests_per_minute }, usage: {…}, observed_at }` |
 | `GET /openapi.json`, `GET /llms.txt`, `GET /health` | none | contract, guide, liveness |
 
 `status.components[]`: `{ id: "one_click" | "custody" | "near", status: "operational" | "degraded" | "down" | "unknown", reason, affects[], since, checked_at }`.
@@ -63,7 +63,7 @@ Details: [owner-intents.md](owner-intents.md), signing: [signing.md](signing.md)
 |---|---|---|---|
 | `GET /v1/status` | key | `correlation_id`, `wait_ms` (0–30000), `refresh` (bool) | `StatusResponse` |
 | `GET /v1/agents/{agent_id}/history` | key | `cursor`, `limit` (1–100, default 25), `include_unpaid` (bool, default false) | page of `StatusResponse` |
-| `GET /v1/agents/{agent_id}/operations/{correlation_id}/proof` | key | path `correlation_id` is an `op_…` id | `{ correlation_id, origin, notary, events }`: each audit event of the execution with a `c2sp.org/tlog-proof@v1` (`PROVEN`) and its `evidence` (the recorded result, hashed into the opening), `PENDING` until the next checkpoint, or `UNLOGGED`; `notary` holds the verifier keys and TDX birth attestation. A deployment without a transparency log answers 501 `transparency_log_disabled` |
+| `GET /v1/agents/{agent_id}/operations/{correlation_id}/proof` | key | path `correlation_id` is an `op_…` id; `from_size?` (the size of your trusted checkpoint, decimal string: adds a consistency path; a server behind it answers 409 `transparency_checkpoint_behind`) | `{ correlation_id, origin, checkpoint, consistency, notary, events }`: each audit event of the execution with a `c2sp.org/tlog-proof@v1` (`PROVEN`) and its `evidence` (the recorded result, hashed into the opening), `PENDING` until the next checkpoint, or `UNLOGGED`; `notary` holds the verifier keys and TDX birth attestation. A deployment without a transparency log answers 501 `transparency_log_disabled` |
 
 ### Agents and reads
 

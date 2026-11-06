@@ -21,7 +21,7 @@ TypeScript, Python, Rust, Go or anything that speaks HTTP.
 ```
  your backend (partner)            end user (owner)                  AI agent
  ─────────────────────            ────────────────                  ────────
- naa_ API key                      wallet: NEAR / EVM / passkey      ngt_ grant token (held by your backend)
+ partner API key                   wallet: NEAR / EVM / passkey      ngt_ grant token (held by your backend)
  prepares owner actions   ──────►  signs: create account, policy,
  stores grant tokens               grants, freeze, approve, delete
  calls executions         ◄─────────────────────────────────────────  swap / transfer / withdraw / deposit
@@ -36,11 +36,14 @@ TypeScript, Python, Rust, Go or anything that speaks HTTP.
 
 ## Quick start
 
-1. **Get a key.** Create a partner API key in the [partner dashboard](https://partners.near-intents.org/) (**API keys**).
-   The `naa_…` token is shown once; store it as `NEAR_INTENTS_AGENT_API_KEY` in your backend's secrets.
+1. **Get a key.** Create a partner API key in the [partner portal](https://partners.near-intents.org/).
+   The portal shows the key once and it expires after 365 days; store it as
+   `NEAR_INTENTS_AGENT_API_KEY` in your backend's secrets. Treat it as an opaque string.
+   Keys created before the partner portal are retired: the API answers `401 api_key_retired`
+   until you create a new one.
 2. **Check it.**
    ```sh
-   NEAR_INTENTS_AGENT_API_KEY=naa_... ./near-intents-agent-api/scripts/check_api.sh
+   NEAR_INTENTS_AGENT_API_KEY=<your key> ./near-intents-agent-api/scripts/check_api.sh
    ```
 3. **Install the skill** (below) and ask your coding agent, for example:
    *"Add NEAR Intents agent wallets to our FastAPI backend: onboarding with the user's NEAR
@@ -96,7 +99,7 @@ first and follow its rules and references.
 near-intents-agent-api/
 ├── SKILL.md                     rules, lifecycle, language paths, where to look
 ├── references/
-│   ├── getting-started.md       dashboard → key → first agent → grant → deposit → swap
+│   ├── getting-started.md       portal → key → first agent → grant → deposit → swap
 │   ├── concepts.md              owner / agent account / partner, policy vs grant, enforcement
 │   ├── http-api.md              every endpoint, header, shape, pagination, curl
 │   ├── owner-intents.md         generate → sign → submit → status, BFF split, recipes

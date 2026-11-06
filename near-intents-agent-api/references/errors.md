@@ -53,7 +53,9 @@ Every error is a JSON:API document:
 | Code | Layer | HTTP | What to do |
 |---|---|---|---|
 | **Auth & request** | | | |
-| `invalid_api_key` | `auth` | 401 | wrong or revoked key, stray whitespace, or a base URL from a different deployment; fix config, don't retry |
+| `invalid_api_key` | `auth` | 401 | unknown, invalid, expired or revoked key, stray whitespace, or a base URL from a different deployment; the detail names the partner portal; fix config, don't retry |
+| `api_key_retired` | `auth` | 401 | a key created before the partner portal; create a new key in the portal and deploy it; never retry |
+| `key_verification_unavailable` | `api` | 503 | the portal could not confirm a key it has not answered for before; retry the same request shortly (same key) |
 | `validation_failed` | `request` | 400 | fix the fields in `source.pointer` (also: an amount that moves funds is `0`, a swap's two assets are the same, a native `sign-transaction` body is not one transaction) |
 | `invalid_json`, `invalid_cursor` | `request` | 400 | fix the request |
 | `idempotency_key_required` | `request` | 400 | add `Idempotency-Key` |
@@ -134,6 +136,7 @@ Every error is a JSON:API document:
 | `operation_not_recoverable` | `api` | 409 | not UNCERTAIN, already dispatched, non-recoverable kind, or other API key → keep polling |
 | `operation_recovery_unavailable` | `api` | 409 | another recovery running → poll |
 | `agent_not_found`, `grant_not_found`, `intent_not_found`, `operation_not_found`, `approval_not_found` | `request` | 404 | wrong id or another account's; pass `correlation_id` exactly as returned |
+| `transparency_checkpoint_behind` | `api` | 409 | the server's published log is older than the checkpoint you sent as `from_size`; keep your trusted checkpoint, never reset it, and retry after the server recovers |
 | **Disabled** | | | |
 | `transparency_log_disabled` | `api` | 501 | this deployment keeps no transparency log; operation proofs are unavailable |
 

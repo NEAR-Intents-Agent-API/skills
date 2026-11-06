@@ -125,9 +125,12 @@ with `approval_vote`; EVM and passkey votes are confirmed by the owner's `0s` wa
 
 - Assets are NEAR Intents assets identified by `asset_id` (`nep141:…`, `nep245:…`) from
   `GET /v1/tokens`. Balances are per asset inside the agent's NEAR Intents account.
-- **Public** balance is normal. **Confidential** balance is shielded (requires policy
-  `confidential: true`); `shield`/`unshield` move between them; `confidential: true` on
-  swap/withdraw/transfer spends from it.
+- **Public** balance is normal. **Confidential** balance lives on `intents.far`, off the public
+  NEAR chain (requires policy `confidential: true`); `shield`/`unshield` move between them;
+  `confidential: true` on swap/withdraw/transfer spends from it. That is access control, not
+  cryptography: FAR's operators and Defuse can read it and give others access, solvers see each
+  intent, and shields, unshields and cross-chain moves stay visible on public chains. Never tell
+  a user it is anonymous or hidden from everyone.
 - **Deposits** come in through 1Click deposit addresses on any supported chain, or directly on
   NEAR. Deposits never need a grant and are always allowed.
 - **Withdrawals** leave NEAR Intents to an external chain address. **Transfers** go to another

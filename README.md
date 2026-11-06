@@ -8,6 +8,8 @@
 
 </div>
 
+> The Agent API is an experimental, mainnet-only beta. You and your users may lose all assets used with it, or lose access to them. It is operated by NEAR Technologies Limited.
+
 ## Overview
 
 A skill for coding agents (Claude Code, Claude.ai, Codex, Cursor, Copilot, Gemini CLI, …) that

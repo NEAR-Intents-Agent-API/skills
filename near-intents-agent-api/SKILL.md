@@ -19,6 +19,9 @@ partner API key and never touches anyone's private keys.
 Hosted API: `https://api.agentsonintents.com` (mainnet, real funds), also the TypeScript SDK's
 default `baseUrl`. Machine-readable contract: `/openapi.json`; compact LLM guide: `/llms.txt`.
 
+The Agent API is an experimental, mainnet-only beta. You and your users may lose all assets used
+with it, or lose access to them. It is operated by NEAR Technologies Limited.
+
 ## Non-negotiable rules
 
 Follow these in every integration; most bugs and lost-fund incidents come from breaking one.
@@ -60,6 +63,9 @@ Follow these in every integration; most bugs and lost-fund incidents come from b
     deadline (300 s, or up to 96 h when it pays only 1Click deposits). Treat the payload like cash,
     sign only what is due soon, and tell the owner. `sign-intent` has its own `receivers` rules; the
     account's `destinations`, limits and budget do not apply ([references/sign-intent.md](references/sign-intent.md)).
+13. **Show the owner the required risk notice.** Before the owner signs `agent_create`, show the
+    Owner Terms, OutLayer's terms and the notice, and keep evidence of acceptance. Show the notice
+    again before the owner funds the wallet. For `agent_create`, `preview.summary` ends with it.
 
 ## Quick start (5 minutes, any language)
 

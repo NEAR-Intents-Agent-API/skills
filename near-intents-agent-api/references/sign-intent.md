@@ -144,6 +144,7 @@ One SOL or SPL transfer without the full-control `sign_transaction`. Build the m
   `403 solana_transaction_forbidden` with the reason in `detail`, and nothing is signed.
 
 This stops payments to arbitrary recipients; it does **not** limit the amount (`assets`, `limits`
-and `budget` are not applied yet). The caller broadcasts the signed transaction while its blockhash
-is recent. The history record keeps `details.target` (recipient), `details.amount` and the transfer
-as read in `details.message_json`.
+and `budget` are not applied yet). Fetch the blockhash right before building the message and
+broadcast as soon as the signature returns: a blockhash expires after about 150 blocks (about a
+minute), and an expired transaction is dropped, not landed late. The history record keeps
+`details.target` (recipient), `details.amount` and the transfer as read in `details.message_json`.

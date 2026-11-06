@@ -19,7 +19,8 @@ guide is `GET /llms.txt`. If this file and the server disagree, the server wins.
 - **Amounts**: atomic integer strings, up to 78 digits. **USD**: decimal strings (`"50"`, `"12.5"`).
 - **Durations**: milliseconds (`timelock_ms`, `wait_ms`, `delay_ms`). **Times**: ISO-8601 UTC.
 - **Ids**: `agent_id`, `grant_id` = 64 hex; `correlation_id` = `op_…` (execution) or
-  `intent_…` (owner intent); `approval_id` = UUID.
+  `intent_…` (owner intent); `approval_id` = UUID. An `agent_id` looks like an implicit NEAR
+  account but is not one: an agent's address is its `wallet.near_account_id`.
 - **Pagination**: `{ data: [...], next_cursor: string | null }`; pass `cursor=<next_cursor>`
   until null. Policy history uses an integer cursor.
 - **Timeouts**: give settlement writes (non-dry swap/withdraw/transfer/shield/unshield) ~150 s,
@@ -88,7 +89,7 @@ Details: [owner-intents.md](owner-intents.md), signing: [signing.md](signing.md)
 |---|---|---|
 | `/swap` | key, grant, idem | `origin_asset`, `destination_asset`, `amount`, `min_amount_out?`, `confidential?`, `dry?` |
 | `/withdraw` | key, grant, idem | `asset`, `amount`, `chain`, `recipient`, `memo?`, `confidential?`, `async?`, `dry?` |
-| `/transfer` | key, grant, idem | `asset`, `amount`, `recipient` (NEAR Intents account; a named one must exist on NEAR, else `invalid_address`), `confidential?` |
+| `/transfer` | key, grant, idem | `asset`, `amount`, `recipient` (NEAR Intents account; a named one must exist on NEAR, else `invalid_address`; to pay another agent, its `wallet.near_account_id`, never its `agent_id`: funds sent there are lost), `confidential?` |
 | `/shield`, `/unshield` | key, grant, idem | `asset`, `amount` |
 | `/deposit` | key, idem | `origin_asset`, `destination_asset?`, `amount?`, `confidential?` |
 | `/recover` | key, grant, idem (original) | `correlation_id`, `request: { type, …original body }` |

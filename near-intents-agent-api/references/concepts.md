@@ -11,7 +11,7 @@ The API splits that into three roles:
 - **Agent account** — one wallet on NEAR Intents per agent, run by the wallet provider
   (a TEE-backed signer). Funds sit there. It moves money only inside the owner-signed
   policy.
-- **Partner** — your backend. It holds the `naa_` API key, prepares owner actions, stores grant
+- **Partner** — your backend. It holds the partner API key, prepares owner actions, stores grant
   tokens and calls executions for its agents.
 
 ## Account, policy, grant

@@ -14,7 +14,7 @@ wallet signers, **server-side only** (it needs the API key).
 import { AgentApi, AgentApiError, AgentApiRequestError, createGrantCredential, createIdempotencyKey } from "@near-intents-agent-api/sdk";
 
 const api = new AgentApi({
-  apiKey: process.env.NEAR_INTENTS_AGENT_API_KEY!,           // naa_… from the partner dashboard
+  apiKey: process.env.NEAR_INTENTS_AGENT_API_KEY!,           // from the partner portal (opaque string)
   baseUrl: process.env.NEAR_INTENTS_AGENT_API_URL,           // optional; defaults to https://api.agentsonintents.com
 });
 
@@ -137,21 +137,36 @@ full-access key of `near_account_id`.
 ## Operation proofs
 
 ```ts
-import { NoteError, ProofError, verifyOperationProof } from "@near-intents-agent-api/sdk";
+import {
+  fetchWitnessCheckpoint, NoteError, ProofError, verifyOperationProof,
+} from "@near-intents-agent-api/sdk";
 
-const proof = await api.getOperationProof(agentId, "op_…");          // executions only
-const verified = verifyOperationProof(proof, "api.agentsonintents.com/log"); // pin the origin yourself
+// Pin the origin and the witness key yourself. Never read either from an API response.
+const ORIGIN = "api.agentsonintents.com/log";
+const WITNESS_KEY = "598165a18b588f504e159c0e2573d73983ae22bf15cf80d36902276d63a11101"; // production
+
+const head = await fetchWitnessCheckpoint("https://api.agentsonintents.com", ORIGIN, WITNESS_KEY);
+const proof = await api.getOperationProof(agentId, "op_…", { from_size: String(head.size) }); // executions only
+const verified = verifyOperationProof(proof, ORIGIN, head);
 // verified.proven: [{ index, fields, checkpoint, cosignedAt, evidence }]; verified.pending, verified.unlogged
 ```
 
-Offline and without trusting the API: each `PROVEN` event hashes to a leaf of a checkpoint signed by
+Without trusting the API: `verifyOperationProof(proof, origin, trusted)` needs a trusted
+checkpoint as well as the pinned origin, and refuses without one. `fetchWitnessCheckpoint` fetches
+a fresh head through `/tee/witness` and checks the front-1 witness signature with the key you
+pinned, even though the API carries the reply. Fetch the head right before requesting the proof
+and send its size as `from_size`; the proof then carries a consistency path from that head. A
+server behind it answers `409 transparency_checkpoint_behind`: keep your trusted checkpoint and retry later. A checkpoint you stored earlier
+proves continuation from that file only, not that it is current. Each `PROVEN` event hashes to a leaf of a checkpoint signed by
 the log key and cosigned by the notary, and names this execution. Its `evidence`, the result it
 recorded with any settlement transaction hashes, must hash to the opening's `evidenceHash` and comes
-back parsed (`null` when none was served). A proof that does not hold, or altered evidence, throws
-`NoteError` or `ProofError`. `PENDING` events wait for the next checkpoint. To tie the keys to
-attested code, check the notary's TDX birth quote (`proof.notary.birth`) and compare its
-`report_data` with `verified.birthReportData`. A deployment without a log answers
-`501 transparency_log_disabled`.
+back parsed (`null` when none was served). A proof that does not hold, an altered or rolled-back
+checkpoint, or altered evidence throws `NoteError` or `ProofError`. `PENDING` events wait for the
+next checkpoint. To tie the keys to attested code, check the notary's TDX birth quote
+(`proof.notary.birth`) and compare its `report_data` with `verified.birthReportData`; the API
+runs in a Google Cloud TDX confidential VM with keys from its own KMS. A deployment without a log
+answers `501 transparency_log_disabled`. The two-argument `verifyOperationProof(proof, origin)` of
+SDK 0.7.2 and earlier did not check for rollback; upgrade to 0.8.0.
 
 ## Errors
 

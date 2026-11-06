@@ -6,7 +6,7 @@ port the script when writing another language.
 
 ```bash
 git clone https://github.com/NEAR-Intents-Agent-API/examples && cd examples
-cp .env.example .env        # NEAR_INTENTS_AGENT_API_KEY from the partner dashboard; owner keys for writes
+cp .env.example .env        # NEAR_INTENTS_AGENT_API_KEY from the partner portal; owner keys for writes
 pnpm install
 pnpm 01:check-api
 ```
@@ -57,7 +57,7 @@ dedicated low-value owner account.
 | `10:timelocked-payout` | `10-recipes/02-timelocked-payout.ts` | timelock, scheduled list, cancel |
 | `10:ai-assistant` | `10-recipes/03-ai-assistant.ts` | grant per assistant, tool → API mapping |
 | `10:full-journey` | `10-recipes/04-full-journey.ts` | create → grant → fund → quote → swap |
-| `11:verify-operation` | `11-verify-operations/01-verify-operation.ts` | operation proof and its evidence, `verifyOperationProof` offline |
+| `11:verify-operation` | `11-verify-operations/01-verify-operation.ts` | operation proof and its evidence: `fetchWitnessCheckpoint`, then `verifyOperationProof` with the trusted head |
 
 Useful support modules to copy: `support/sign-near-intent.ts` (server-side NEAR signer:
 NEP-413 + NEP-366), `support/evm-owner.ts` (EVM owner descriptor + EIP-712),

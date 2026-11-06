@@ -1,6 +1,6 @@
 ---
 name: near-intents-agent-api
-description: Build on the NEAR Intents Agent API (api.agentsonintents.com) in any language — TypeScript, Python, Rust, Go or plain HTTP. Use when integrating AI-agent wallets on NEAR Intents into an app or backend, when code mentions `naa_` API keys, `ngt_` grant tokens, `X-Grant-Token`, `generate-intent`/`submit-intent`, `@near-intents-agent-api/sdk`, `sign-intent`/`sign-in`/`sign-transfer` native routes, owner-signed spending policies, agent swaps/transfers/withdrawals/deposits, or when someone wants an AI agent to hold and move funds under owner-set limits.
+description: Build on the NEAR Intents Agent API (api.agentsonintents.com) in any language — TypeScript, Python, Rust, Go or plain HTTP. Use when integrating AI-agent wallets on NEAR Intents into an app or backend, when code mentions partner API keys (`X-API-Key`), `ngt_` grant tokens, `X-Grant-Token`, `generate-intent`/`submit-intent`, `@near-intents-agent-api/sdk`, `sign-intent`/`sign-in`/`sign-transfer` native routes, owner-signed spending policies, agent swaps/transfers/withdrawals/deposits, or when someone wants an AI agent to hold and move funds under owner-set limits.
 ---
 
 # NEAR Intents Agent API
@@ -12,7 +12,7 @@ partner API key and never touches anyone's private keys.
 
 | Party | Credential | Does |
 |---|---|---|
-| **Partner** (your backend) | API key `naa_…` from the [partner dashboard](https://partners.near-intents.org/) | Calls every endpoint, prepares owner actions, stores grants |
+| **Partner** (your backend) | Partner API key (`X-API-Key`) from the [partner portal](https://partners.near-intents.org/) | Calls every endpoint, prepares owner actions, stores grants |
 | **Owner** (end user) | Their wallet: NEAR account, EVM key or passkey | Signs: create account, policy, grants, freeze, approve, delete |
 | **Agent** (assistant, bot, session) | Grant token `ngt_…` (held by your backend) | Moves money inside the owner's policy |
 
@@ -26,7 +26,7 @@ with it, or lose access to them. It is operated by NEAR Technologies Limited.
 
 Follow these in every integration; most bugs and lost-fund incidents come from breaking one.
 
-1. **API key and grant tokens are backend-only.** Never ship `naa_…`/`ngt_…` to a browser, mobile
+1. **API key and grant tokens are backend-only.** Never ship the partner API key or `ngt_…` tokens to a browser, mobile
    app, prompt, log or LLM context. Browsers only see `intent.payload` + `preview` and return the
    wallet's output.
 2. **The owner's wallet signs `intent.payload` exactly as returned.** Pick the method from
@@ -69,8 +69,9 @@ Follow these in every integration; most bugs and lost-fund incidents come from b
 
 ## Quick start (5 minutes, any language)
 
-1. Create a partner API key in the **[partner dashboard](https://partners.near-intents.org/)** (**API keys**). The `naa_…` token is
-   shown once — put it in your backend's secret store as `NEAR_INTENTS_AGENT_API_KEY`.
+1. Create a partner API key in the **[partner portal](https://partners.near-intents.org/)**. The portal shows it once and it
+   expires after 365 days — put it in your backend's secret store as `NEAR_INTENTS_AGENT_API_KEY`. Treat it as an opaque string
+   (no prefix or format checks). Keys created before the portal are retired and answer `401 api_key_retired`.
 2. Smoke-test:
    ```bash
    curl -s https://api.agentsonintents.com/v1/network            # public: service health

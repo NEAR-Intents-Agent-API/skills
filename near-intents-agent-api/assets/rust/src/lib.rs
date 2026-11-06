@@ -5,7 +5,7 @@
 //! automatic retries. Request and response bodies are `serde_json::Value`; generate typed
 //! models from `GET /openapi.json` if you want them.
 //!
-//! Backend only: the API key (`naa_…`) and grant tokens (`ngt_…`) never reach a browser.
+//! Backend only: the partner API key and grant tokens (`ngt_…`) never reach a browser.
 //!
 //! The signers (`sign_nep413`, `sign_nep366`, `sign_eip712`) are for scripts, tests and
 //! server-held owner keys. In a real product the owner's wallet signs in the browser; your
@@ -108,8 +108,9 @@ pub struct AgentApi {
 impl AgentApi {
     pub fn new(api_key: impl Into<String>, base_url: Option<&str>) -> Result<Self> {
         let api_key = api_key.into();
-        if !valid_token(&api_key, "naa_") {
-            return Err(Error::Invalid("api_key is not a naa_ key".into()));
+        // The key is opaque: only reject paste mistakes, never a format.
+        if api_key.is_empty() || api_key.chars().any(|c| c.is_whitespace() || c == '"' || c == '\'') {
+            return Err(Error::Invalid("api_key is empty or has whitespace or quotes".into()));
         }
         let http = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())

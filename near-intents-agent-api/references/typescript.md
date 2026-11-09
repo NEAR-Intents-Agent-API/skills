@@ -24,7 +24,7 @@ await api.getPartnerQuota();
 const tokens = await api.getTokens();          // TokenView[]
 ```
 
-Options: `baseUrl`, `timeoutMs` (default 150 s for settlement writes, 65 s otherwise),
+Options: `baseUrl`, `timeoutMs` (default 150 s for settlement writes: live swap, limit order, withdraw, transfer, shield, unshield; 65 s otherwise),
 `maxResponseBytes`, `fetch`, `grantToken`.
 
 ## Owner intent loop
@@ -49,7 +49,7 @@ let status = await api.getStatus(generated.correlation_id, { waitMs: 30_000 });
 `generateIntent` returns `idempotencyKey`; to retry an interrupted generation pass the same one:
 `api.generateIntent(req, { idempotencyKey })`.
 
-Typed narrowing: `GenerateIntentResponseOf<"policy_update">`, `StatusResponseOf<"swap">`.
+Typed narrowing: `GenerateIntentResponseOf<"policy_update">`, `StatusResponseOf<"swap">`, `StatusResponseOf<"limit_order">`.
 
 ## Grants
 
@@ -75,6 +75,7 @@ const quote = await agent.swap(agentId, {
 // would fail under its code (spend_budget_exceeded, policy_schedule_denied + available_at,
 // insufficient_balance + available_amount, …). Check it before the real swap.
 // An unlisted asset or an invalid recipient throws unsupported_token or invalid_address (400), before any provider call.
+// A token withdrawal to a NEAR account with no storage on that token is invalid_address (409), a preview too.
 // A frozen, archived or deleted account gets no quote: it throws wallet_frozen, agent_archived or agent_deleted.
 // withdraw(…, { dry: true }) is the same shape but needs the grant and a key; a preview that reaches the
 // provider counts toward the wallet's 1,000 custody operations per rolling 24 h (swap quotes do not).
@@ -89,11 +90,30 @@ const deposit = await api.deposit(agentId, { origin_asset: usdcOnBase }, { idemp
 
 Also: `withdraw`, `transfer`, `shield`, `unshield`, `recover(agentId, { correlation_id, request }, { idempotencyKey })`.
 
+### Limit orders (SDK 0.8.1)
+
+```ts
+const order = { base_asset: "nep141:wrap.near", quote_asset: usdt, side: "sell" as const,
+                quantity: "1000000000000000000000000", price: "5.2" };  // price: quote units per whole base
+const preview = await agent.placeLimitOrder(agentId, { ...order, dry: true });   // no grant, no key, no provider call; QuoteResponse
+const placed = await agent.placeLimitOrder(agentId, order, { idempotencyKey });  // SUCCESS = funded and resting, not filled
+const orderId = placed.details?.order_id;
+
+const { data } = await agent.listLimitOrders(agentId, { open: true, limit: 100, offset: 0 });  // { data }, not unwrapped; no grant
+const live = await agent.getLimitOrder(agentId, orderId!);                       // fill_status, partial_fills, payouts, is_payout_status_final
+await agent.cancelLimitOrder(agentId, orderId!);                                 // grant, no key
+let round = await agent.cancelAllLimitOrders(agentId);                           // up to 50 a call
+while (!round.complete) round = await agent.cancelAllLimitOrders(agentId);
+```
+
+Types: `LimitOrderRequest`, `LimitOrderView`, `LimitOrderPage`, `CancelLimitOrderResult`,
+`CancelAllLimitOrdersResult`. Rules, polling and error handling: [limit-orders.md](limit-orders.md).
+
 ## Reads
 
 `listAgents({ external_user_id, cursor })`, `getAgent`, `getWallet`, `getBalances(id, { source, asset })`,
 `getPolicy`, `getPolicyHistory`, `listGrants`, `listScheduledExecutions`, `getContainment`,
-`listApprovals`, `getApproval`, `getAddress(id, "near")`, `listProviderRecords(id, kind)`,
+`listApprovals`, `getApproval`, `listLimitOrders`, `getLimitOrder`, `getAddress(id, "near")`, `listProviderRecords(id, kind)`,
 `getHistory(id, { cursor, limit, include_unpaid })`, `getStatus(cid, { waitMs, refresh })`,
 `getOperationProof(id, cid)`.
 
@@ -179,6 +199,7 @@ try {
       case "policy_destination_denied": /* ask owner to allow the address; for sign-intent read error.detail first (unlisted receiver vs a quote that failed the 1Click check) */ break;
       case "spend_budget_exceeded":     /* show remaining budget (a dry quote or preview warns with this code); nothing was recorded */ break;
       case "insufficient_balance":      /* fund, or send at most error.availableAmount (atomic units) */ break;
+      case "policy_price_deviation_exceeded": /* limit order: price closer to the market, or owner raises limit_order.max_deviation_bps */ break;
       case "policy_schedule_denied":    /* outside owner hours: same request at error.availableAt */ break;
       case "policy_change_throttled":   /* error.availableAt */ break;
       default:

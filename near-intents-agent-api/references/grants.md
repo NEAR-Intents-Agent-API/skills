@@ -44,7 +44,7 @@ issue another. Never log it, never put it in an LLM prompt, URL or client bundle
 
 ## Use
 
-Send it as `X-Grant-Token` on swap, withdraw, transfer, shield, unshield, recover (and
+Send it as `X-Grant-Token` on swap, limit orders (place and cancel), withdraw, transfer, shield, unshield, recover (and
 sign). One client per grant, so concurrent sessions never borrow each other's token:
 
 ```ts
@@ -64,7 +64,9 @@ activity feeds and audits.
 ```
 
 Takes effect for anything not yet dispatched. Operations already past the dispatch commit finish;
-`details.committed_correlation_ids` lists them (`committed_truncated` if the list was cut).
+`details.committed_correlation_ids` lists them (`committed_truncated` if the list was cut). A limit
+order already resting stays on the book: revoking the placing grant does not cancel it, and
+cancelling needs a live grant (any of the account's), so keep one that can.
 Expired grants stop working by themselves.
 
 Audit: `GET /v1/agents/{id}/grants` (revoked included, each with the canonical `owner_message`

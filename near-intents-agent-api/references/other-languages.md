@@ -2,7 +2,7 @@
 
 The API is plain HTTPS + JSON. Any language works; you need:
 
-1. An HTTP client with per-request timeouts (65 s normal, 150 s for settlement writes).
+1. An HTTP client with per-request timeouts (65 s normal, 150 s for settlement writes: live swap, limit order, withdraw, transfer, shield, unshield).
 2. JSON that can keep `intent.payload` verbatim (raw bytes or an order-preserving tree).
 3. SHA-256, random bytes, base64url, hex — for grant tokens and idempotency keys.
 4. Only if you sign on the server: ed25519 + borsh-style byte packing (NEAR owners) or
@@ -27,7 +27,8 @@ fields and break signature checks.
 
 ```
 headers:   X-API-Key, Content-Type: application/json, Accept: application/json
-           + X-Grant-Token on grant endpoints, + Idempotency-Key on executions/deposit
+           + X-Grant-Token on grant endpoints (incl. limit-order place and cancel), + Idempotency-Key on executions/deposit
+             (a live limit order too; not on cancels or limit-order previews)
 success:   2xx JSON
 error:     ≥400 JSON:API → raise {status, code=errors[0].code, detail, retryable, available_at, request_id, idempotency_key}
 transport: raise with the idempotency key so the caller can retry with it

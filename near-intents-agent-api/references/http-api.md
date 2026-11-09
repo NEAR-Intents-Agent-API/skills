@@ -12,8 +12,8 @@ guide is `GET /llms.txt`. If this file and the server disagree, the server wins.
   | Header | When |
   |---|---|
   | `X-API-Key: <partner API key>` | every endpoint except `/v1/network`, `/v1/tokens` |
-  | `X-Grant-Token: ngt_…` | swap, withdraw (including `dry: true` previews), transfer, shield, unshield, recover, every `native/…` route (not swap quotes, not deposit) |
-  | `Idempotency-Key` | required on executions, withdrawal previews and deposit (not on swap quotes); optional on `generate-intent`. 8–128 chars `[A-Za-z0-9._:-]` |
+  | `X-Grant-Token: ngt_…` | swap, limit-orders (place, cancel, cancel-all), withdraw (including `dry: true` previews), transfer, shield, unshield, recover, every `native/…` route (not swap quotes or limit-order previews, not limit-order reads, not deposit) |
+  | `Idempotency-Key` | required on executions (a live limit order too), withdrawal previews and deposit (not on swap quotes, limit-order previews or cancels); optional on `generate-intent`. 8–128 chars `[A-Za-z0-9._:-]` |
   | `Content-Type: application/json` | every body |
 - Responses carry `x-request-id`; errors repeat it as `meta.request_id`. Log it.
 - **Amounts**: atomic integer strings, up to 78 digits. **USD**: decimal strings (`"50"`, `"12.5"`).
@@ -22,8 +22,9 @@ guide is `GET /llms.txt`. If this file and the server disagree, the server wins.
   `intent_…` (owner intent); `approval_id` = UUID. An `agent_id` looks like an implicit NEAR
   account but is not one: an agent's address is its `wallet.near_account_id`.
 - **Pagination**: `{ data: [...], next_cursor: string | null }`; pass `cursor=<next_cursor>`
-  until null. Policy history uses an integer cursor.
-- **Timeouts**: give settlement writes (non-dry swap/withdraw/transfer/shield/unshield) ~150 s,
+  until null. Policy history uses an integer cursor. The limit-order list is the exception: `{ data }`
+  only, newest first, paged with `limit` (1–100) and `offset`; a page shorter than `limit` is the last.
+- **Timeouts**: give settlement writes (non-dry swap/limit order/withdraw/transfer/shield/unshield) ~150 s,
   everything else ~65 s (long-poll is 30 s max). Don't retry on client timeout with a new key.
 - **Errors**: JSON:API `{ errors: [{ status, code, layer, title, detail?, source?, meta? }], meta: { request_id } }`.
   Branch on `errors[0].code`; `layer` (`request|auth|grant|policy|budget|balance|provider|api`)
@@ -81,6 +82,8 @@ Details: [owner-intents.md](owner-intents.md), signing: [signing.md](signing.md)
 | `GET /v1/agents/{agent_id}/approvals` | | `{ data: ApprovalView[] }` |
 | `GET /v1/agents/{agent_id}/approvals/{approval_id}` | | `ApprovalView` |
 | `GET /v1/agents/{agent_id}/containment` | `grants_cursor`, `operations_cursor` | live grants + unfinished operations ("what is still able to act") |
+| `GET /v1/agents/{agent_id}/limit-orders` | `open` (bool), `limit` (1–100), `offset` | `{ data: LimitOrderView[] }`, newest first, as 1Click lists them (status not refreshed) |
+| `GET /v1/agents/{agent_id}/limit-orders/{order_id}` | | `LimitOrderView`, live: `fill_status`, `partial_fills`, `payouts`, `is_payout_status_final`, `app_fees`, `deadline`; 404 `limit_order_not_found` |
 | `GET /v1/agents/{agent_id}/provider/{kind}` | `kind` = requests \| audit \| deposits \| deposit_history; `limit`, `offset`, `type` | provider's raw records (`{ data }`) |
 
 ### Executions (all `POST /v1/agents/{agent_id}/…`, 202)
@@ -88,6 +91,9 @@ Details: [owner-intents.md](owner-intents.md), signing: [signing.md](signing.md)
 | Path | Auth | Body |
 |---|---|---|
 | `/swap` | key, grant, idem | `origin_asset`, `destination_asset`, `amount`, `min_amount_out?`, `confidential?`, `dry?` |
+| `/limit-orders` | key, grant, idem | `base_asset`, `quote_asset`, `side` (`sell`\|`buy`), `quantity` (atomic base), `price` (decimal string, quote per whole base), `deadline?` (RFC 3339, ≤ 7 days), `confidential?`, `dry?` |
+| `/limit-orders/{order_id}/cancel` → 200 | key, grant | none; returns the order (fields optional, `{}` possible) |
+| `/limit-orders/cancel-all` → 200 | key, grant | none; `{ known, cancelled, failed, remaining, complete }`, at most 50 per call |
 | `/withdraw` | key, grant, idem | `asset`, `amount`, `chain`, `recipient`, `memo?`, `confidential?`, `async?`, `dry?` |
 | `/transfer` | key, grant, idem | `asset`, `amount`, `recipient` (NEAR Intents account; a named one must exist on NEAR, else `invalid_address`; to pay another agent, its `wallet.near_account_id`, never its `agent_id`: funds sent there are lost), `confidential?` |
 | `/shield`, `/unshield` | key, grant, idem | `asset`, `amount` |
@@ -125,8 +131,8 @@ return `signature: null`, older records too. Rules: [policy.md](policy.md#native
 the `sign-intent`, `sign-in` and `sign-transfer` routes: [sign-intent.md](sign-intent.md). A freeze
 refuses new native requests but cannot recall a `sign-intent` payload already signed.
 
-`dry: true` on swap/withdraw → 200 `{ dry: true, type, quote, spend, fee, warnings }`. A swap quote
-needs no grant and no idempotency key; a withdrawal preview needs both (same key replays it for
+`dry: true` on swap/limit-orders/withdraw → 200 `{ dry: true, type, quote, spend, fee, warnings }`. A swap quote
+or limit-order preview needs no grant and no idempotency key (the preview makes no provider call); a withdrawal preview needs both (same key replays it for
 60 s; no API cap, the provider's 1,000 custody operations per rolling 24 h apply). The
 account's rules (action, destination, assets, schedule, USD budget, per-asset limits,
 `max_actions_per_hour`) and `insufficient_balance` never refuse either: each one the live request
@@ -148,7 +154,7 @@ StatusResponse = {
   agent_id: string | null,
   type: "agent_create" | "policy_update" | "agent_freeze" | "agent_unfreeze" | "agent_archive"
       | "agent_restore" | "agent_delete" | "grant_issue" | "grant_revoke" | "execution_cancel"
-      | "approval_vote" | "swap" | "withdraw" | "transfer" | "shield" | "unshield" | "deposit"
+      | "approval_vote" | "swap" | "limit_order" | "withdraw" | "transfer" | "shield" | "unshield" | "deposit"
       | "native",
   status: "PENDING_SIGNATURE" | "QUEUED" | "PENDING_APPROVAL" | "PENDING_DEPOSIT" | "PROCESSING"
         | "SUCCESS" | "REFUNDED" | "FAILED" | "UNCERTAIN" | "NEEDS_REVIEW",
@@ -167,7 +173,7 @@ reads `PROCESSING`, with `details.provider_status` keeping the provider's own st
 
 | type | details |
 |---|---|
-| executions, `deposit`, `agent_delete` | `action`, `request?` (the request as admitted, in the request body's field names: optional `origin_asset`, `destination_asset`, `asset`, `amount`, `min_amount_out`, `chain`, `recipient`, `memo`, `confidential`; `confidential` is the balance it spends from, or for a deposit credits), `near_account_id?`, `provider_request_id?`, `chain?`, `execute_after?`, `delay_ms?`, `approval_id?`, `intent_hash?`, `tx_hash?`, `destination_tx_hash?`, `amount_out?`, `deposit_address?`, `memo?`, `min_amount?`, `min_amount_out?`, `expires_at?`, `deposit_seen_at?` (deposit: first sighting of funds), `refund_to?`, `refund_tx_hash?`, `failure_reason?`, `reason?` (NEEDS_REVIEW), `never_executed?`, `never_submitted?`, `settled_late?`, + provider fields |
+| executions, `deposit`, `agent_delete` | `action`, `request?` (the request as admitted, in the request body's field names: optional `origin_asset`, `destination_asset`, `asset`, `amount`, `min_amount_out`, `chain`, `recipient`, `memo`, `side`, `price`, `quantity`, `deadline` (the last four for limit orders), `confidential`; `confidential` is the balance it spends from, or for a deposit credits), `near_account_id?`, `provider_request_id?`, `chain?`, `execute_after?`, `delay_ms?`, `approval_id?`, `intent_hash?`, `tx_hash?`, `destination_tx_hash?`, `amount_out?`, `order_id?` (limit order: the resting order's id), `available_amount?` (a FAILED `insufficient_balance` / `custody_native_balance_required`), `deposit_address?`, `memo?`, `min_amount?`, `min_amount_out?`, `expires_at?`, `deposit_seen_at?` (deposit: first sighting of funds), `refund_to?`, `refund_tx_hash?`, `failure_reason?`, `reason?` (NEEDS_REVIEW), `never_executed?`, `never_submitted?`, `settled_late?`, + provider fields |
 | `agent_create` | `agent_id`, `revision`, `policy_hash`, `transaction_hash` |
 | `policy_update`, `agent_freeze`, `agent_unfreeze` | `revision`, `policy_hash`, `transaction_hash` (null when the revision applied without a blockchain transaction) |
 | `grant_issue` | `grant: GrantView \| null` |

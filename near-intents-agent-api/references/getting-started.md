@@ -156,7 +156,8 @@ Idempotency-Key: swap_9a1e…
 { "origin_asset": "nep141:wrap.near", "destination_asset": "<usdc>", "amount": "1000000000000000000000000", "dry": true }
 ```
 
-`dry: true` returns `{dry: true, type: "swap", quote, spend, fee, warnings}` (no key, no grant needed).
+`dry: true` returns `{dry: true, type: "swap", quote, spend, fee, warnings}` (no key, no grant needed; a limit order
+(`POST …/limit-orders`, see [limit-orders.md](limit-orders.md)) previews the same way).
 The account's rules do not refuse it; an unlisted asset or invalid recipient does (400). `spend` shows what the budget would count and what is left, `fee`
 the share the route keeps, `warnings` any `high_fee` plus each rule the live swap would fail
 (policy, schedule, USD budget, limits, balance) under the code the live swap would get. A frozen, archived or deleted

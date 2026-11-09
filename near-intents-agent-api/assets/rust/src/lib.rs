@@ -149,9 +149,11 @@ impl AgentApi {
         grant: bool,
     ) -> Result<Value> {
         let dry = body.and_then(|b| b.get("dry")).and_then(Value::as_bool).unwrap_or(false);
-        let settlement = ["/swap", "/withdraw", "/transfer", "/shield", "/unshield"]
-            .iter()
-            .any(|suffix| path.ends_with(suffix))
+        // Only a live POST settles: GET .../limit-orders is a read.
+        let settlement = method == Method::POST
+            && ["/swap", "/limit-orders", "/withdraw", "/transfer", "/shield", "/unshield"]
+                .iter()
+                .any(|suffix| path.ends_with(suffix))
             && !dry;
         let mut request = self
             .http
@@ -252,6 +254,27 @@ impl AgentApi {
         self.get(&format!("/v1/agents/{agent_id}/balances"), &[("source", source.into())]).await
     }
 
+    /// `{ "data": [...] }`, newest first, offset-paged (`limit` at most 100). API key only, no grant.
+    /// The list does not refresh an order's status: read one with `get_limit_order`.
+    pub async fn list_limit_orders(&self, agent_id: &str, open: Option<bool>, limit: Option<u32>, offset: Option<u32>) -> Result<Value> {
+        let mut query = vec![];
+        if let Some(open) = open {
+            query.push(("open", open.to_string()));
+        }
+        if let Some(limit) = limit {
+            query.push(("limit", limit.to_string()));
+        }
+        if let Some(offset) = offset {
+            query.push(("offset", offset.to_string()));
+        }
+        self.get(&format!("/v1/agents/{agent_id}/limit-orders"), &query).await
+    }
+
+    /// One order, live from 1Click: fill_status, partial_fills, payouts, is_payout_status_final.
+    pub async fn get_limit_order(&self, agent_id: &str, order_id: &str) -> Result<Value> {
+        self.get(&format!("/v1/agents/{agent_id}/limit-orders/{order_id}"), &[]).await
+    }
+
     // -- executions -----------------------------------------------------------------------------
 
     /// Dry quote: no grant, no idempotency key, no budget charge.
@@ -260,7 +283,29 @@ impl AgentApi {
         self.request(Method::POST, &format!("/v1/agents/{agent_id}/swap"), &[], Some(&request), None, false).await
     }
 
-    /// `action`: swap | withdraw | transfer | shield | unshield | recover. Needs `for_grant`.
+    /// Limit-order preview: no grant, no idempotency key, no provider call, no budget charge.
+    /// `warnings` lists each rule a live order would fail.
+    pub async fn quote_limit_order(&self, agent_id: &str, mut request: Value) -> Result<Value> {
+        request["dry"] = json!(true);
+        self.request(Method::POST, &format!("/v1/agents/{agent_id}/limit-orders"), &[], Some(&request), None, false).await
+    }
+
+    /// Cancels one resting order; the unfilled part is refunded. Needs `for_grant`, no key. Works
+    /// while frozen or after the policy drops `limit_order`.
+    pub async fn cancel_limit_order(&self, agent_id: &str, order_id: &str) -> Result<Value> {
+        let path = format!("/v1/agents/{agent_id}/limit-orders/{order_id}/cancel");
+        self.request(Method::POST, &path, &[], None, None, true).await
+    }
+
+    /// Cancels up to 50 orders: call again until `complete` is true. Needs `for_grant`, no key.
+    pub async fn cancel_all_limit_orders(&self, agent_id: &str) -> Result<Value> {
+        let path = format!("/v1/agents/{agent_id}/limit-orders/cancel-all");
+        self.request(Method::POST, &path, &[], None, None, true).await
+    }
+
+    /// `action`: swap | limit-orders | withdraw | transfer | shield | unshield | recover. Needs `for_grant`.
+    /// A live limit order is `execute(id, "limit-orders", body, key)`: SUCCESS means funded and resting,
+    /// not filled (`details.order_id`; follow it with `get_limit_order`).
     pub async fn execute(&self, agent_id: &str, action: &str, request: &Value, idempotency_key: &str) -> Result<Value> {
         let path = format!("/v1/agents/{agent_id}/{action}");
         self.request(Method::POST, &path, &[], Some(request), Some(idempotency_key), true).await

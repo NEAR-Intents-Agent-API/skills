@@ -2,12 +2,12 @@
 
 One complete, owner-signed rulebook per agent account. Every grant acts within it. Each
 `agent_create` and `policy_update` carries the **whole** policy, never a diff; every field below
-is required except `schedule` and `native`.
+is required except `schedule`, `native` and `limit_order`.
 
 ```ts
 Policy = {
   frozen: boolean,
-  actions: ("swap" | "transfer" | "withdraw")[],          // unique; deposits are always allowed
+  actions: ("swap" | "transfer" | "withdraw" | "limit_order")[],   // unique; deposits are always allowed
   confidential: boolean,                                  // shield/unshield + confidential form of each action
   owner_approval: boolean,                                // every outgoing money action waits for the owner's vote
   assets: "any" | string[],                               // asset_id values, ≤128; "*" is refused, use "any"
@@ -22,6 +22,7 @@ Policy = {
   budget: { daily_usd: string | null, weekly_usd: string | null, monthly_usd: string | null },
   timelock_ms: number,                                    // 0 … 2_592_000_000 (30 days)
   schedule?: Schedule,                                    // omit = money actions may run any time
+  limit_order?: { max_deviation_bps: number },            // 0–300, omit = 100: how far worse than the market a limit order may be priced
   native?: Native                                         // omit = every native method off
 }
 
@@ -66,8 +67,8 @@ Unknown fields are rejected (strict objects). Field names are snake_case.
 | Field | Effect | Enforced by |
 |---|---|---|
 | `frozen` | kill switch: every money action refused (`wallet_frozen`). Use `agent_freeze`/`agent_unfreeze` intents, not a policy edit | provider |
-| `actions` | which money actions exist at all. Missing → `policy_action_denied` | provider |
-| `confidential` | enables `shield`, `unshield`, and `confidential: true` on swap/withdraw/transfer | provider |
+| `actions` | which money actions exist at all. Missing → `policy_action_denied`. `limit_order` allows placing limit orders; cancelling one needs no action | provider |
+| `confidential` | enables `shield`, `unshield`, and `confidential: true` on swap/withdraw/transfer/limit order | provider |
 | `owner_approval` | outgoing actions go `PENDING_APPROVAL` until the owner votes; deposits unaffected. Hard limits still reject first | provider |
 | `assets` | tokens the agent may spend (`"any"` or explicit ids; `"*"` is not an asset id and is refused with `validation_failed`, here and as a `limits` key). Swaps may buy unlisted tokens but not sell them | provider |
 | `limits` | per-asset caps per transaction and per rolling hour/day/month. Needs named assets to be meaningful | provider; per-transaction and windows also **API** |
@@ -75,6 +76,7 @@ Unknown fields are rejected (strict objects). Field names are snake_case.
 | `destinations` | where withdrawals/transfers may go | **API** |
 | `budget` | total USD value across all assets per day / week / month, counted from when each cap was turned on; shared by every grant | **API** |
 | `timelock_ms` | every outgoing money action is `QUEUED` this long; owner can `execution_cancel` | **API** |
+| `limit_order` | `max_deviation_bps` bounds a limit order's price against the market (see below); the `limit_order` *action* is in `actions` | **API** |
 | `schedule` | weekly windows on the owner's clock when money actions may run (`only`) or are paused (`except`) | **API** |
 
 `budget` notes: charged atomically at dispatch using 1Click USD prices; an asset with no fresh
@@ -98,13 +100,33 @@ any withdrawal, and a deposit back does not credit it. Swap quotes and withdrawa
 
 `limits` notes: the API refuses an amount above `per_transaction` with `policy_transaction_limit_exceeded` (403) before anything is
 recorded (native NEAR and wNEAR share one cap). It also counts hourly/daily/monthly limits and `max_actions_per_hour` per
-agent, shared by every grant, at dispatch. Swaps, withdrawals, transfers, **shield and unshield**
+agent, shared by every grant, at dispatch. Swaps, limit orders, withdrawals, transfers, **shield and unshield**
 all count; `near` and `nep141:wrap.near` share one count. Pending/uncertain actions count until
 settled; a completed one counts for the full window after completion; removing a limit keeps the
 usage. Over → `policy_limit_exceeded` / `policy_action_limit_exceeded` (403); earlier actions
 without a count → `policy_usage_unavailable` (409). Remaining per-asset allowance is not readable. These are plain refusals of an execution that runs now (no
 operation, no `FAILED` status, no charge; a timelocked one is judged, and can end `FAILED`, when released). Dry-run quotes and previews are not refused for these;
 they carry the same codes in `warnings`.
+
+`limit_order` notes (`actions` includes `limit_order`; `confidential: true` orders need `confidential` too):
+- `limit_order: { max_deviation_bps }` (0 to 300, default 100 when omitted) bounds the price a
+  grant may set, so a leaked grant cannot sell the account's assets far below their value: a
+  `sell` may be priced at most that many basis points below the market price (base asset's USD
+  price over the quote asset's), a `buy` at most that far above. A better price is not limited. Over
+  the bound is `policy_price_deviation_exceeded` (403); no fresh USD price for either asset is
+  `market_price_unavailable` (503).
+- Judged at placement, and again when a timelock or an owner approval releases the order. If the
+  market price is briefly unavailable when a timelocked order is released, the API retries it later
+  instead of failing it.
+- An order runs through the same rules as a swap on the asset it spends: `assets`, per-asset
+  `limits`, `max_actions_per_hour` (each placement counts, cancels do not), the USD budget, `timelock_ms`,
+  `schedule` and `owner_approval`. `destinations` does not apply. The budget and limits are charged
+  when the order is placed; a cancel does not give the budget charge back.
+- Changing only `limit_order.max_deviation_bps` is an owner signature with no transaction (like
+  `destinations`, `budget`, `timelock_ms`, `schedule`). Adding or removing `limit_order` in `actions`
+  changes the provider's policy and needs a transaction.
+- A freeze, or an applied policy that no longer lists `limit_order`, makes the API cancel the
+  account's open orders. Cancelling is never refused by the policy.
 
 `destinations` notes:
 - `only` + `[]` (the safe default) keeps funds inside the account: swaps only.
@@ -133,6 +155,7 @@ they carry the same codes in `warnings`.
   changes `schedule`.
 - Exempt: deposits, `native` requests and owner approval votes.
 - Not sent to the provider: a schedule-only edit is an off-chain owner signature.
+- A limit order is judged against the schedule when placed; cancelling one ignores it.
 
 ## Native accounts (`native`)
 
@@ -240,6 +263,10 @@ Omit it and every native method is off. A policy update replaces the whole polic
 }
 ```
 
+**Limit-order trader**: the swap-only policy above with `"actions": ["swap", "limit_order"]` and
+`"limit_order": { "max_deviation_bps": 50 }` (prices at most 0.5% worse than the market). Add
+`"confidential": true` for confidential orders.
+
 **Payroll / payouts to an allow-list with a review window**:
 
 ```json
@@ -280,7 +307,8 @@ explicitly accept that the agent can send anywhere.
 2. Check `GET /v1/agents/{id}` → `cooldowns.policy_change_available_at` is null or past.
 3. Build the complete new policy from `view.policy` (to remove a schedule, omit `schedule`).
 4. `generate-intent {type: "policy_update", agent_id, policy, expected_revision: view.revision}`.
-5. Owner signs (`nep413`/`eip712` when only API-enforced fields changed, otherwise on chain).
+5. Owner signs (`nep413`/`eip712` when only API-enforced fields changed (`destinations`, `budget`, `timelock_ms`,
+   `schedule`, `limit_order.max_deviation_bps`), otherwise on chain).
 6. Submit, wait `SUCCESS`, then poll `GET …/policy` until `APPLIED` and
    `provider_policy_synced: true`. Until then executions fail with `policy_not_ready`.
 

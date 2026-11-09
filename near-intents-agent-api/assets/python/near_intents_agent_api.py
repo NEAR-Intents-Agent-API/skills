@@ -34,7 +34,7 @@ import httpx
 DEFAULT_BASE_URL = "https://api.agentsonintents.com"
 API_KEY_INVALID = re.compile(r"[\s\"']")  # the key is opaque: only reject paste mistakes
 GRANT_TOKEN_PATTERN = re.compile(r"^ngt_[A-Za-z0-9_-]{43}$")
-SETTLEMENT_PATHS = ("/swap", "/withdraw", "/transfer", "/shield", "/unshield")
+SETTLEMENT_PATHS = ("/swap", "/limit-orders", "/withdraw", "/transfer", "/shield", "/unshield")
 STILL_MOVING = {"PROCESSING", "QUEUED"}
 
 
@@ -158,7 +158,8 @@ class AgentApi:
                 raise ValueError("this call needs a grant: use api.for_grant(token)")
             headers["x-grant-token"] = self.grant_token
         params = {k: (str(v).lower() if isinstance(v, bool) else v) for k, v in (query or {}).items() if v is not None}
-        settlement = path.endswith(SETTLEMENT_PATHS) and not (isinstance(body, dict) and body.get("dry"))
+        # Only a live POST settles: GET .../limit-orders is a read.
+        settlement = method == "POST" and path.endswith(SETTLEMENT_PATHS) and not (isinstance(body, dict) and body.get("dry"))
         try:
             response = self._http.request(
                 method,
@@ -238,6 +239,18 @@ class AgentApi:
     def list_approvals(self, agent_id: str) -> list[dict[str, Any]]:
         return self.request("GET", f"/v1/agents/{agent_id}/approvals")["data"]
 
+    def list_limit_orders(
+        self, agent_id: str, open: bool | None = None, limit: int | None = None, offset: int | None = None
+    ) -> dict[str, Any]:
+        """`{"data": [...]}`, newest first, offset-paged (`limit` at most 100). API key only, no grant.
+        The list does not refresh an order's status: read one with `get_limit_order`."""
+        query = {"open": open, "limit": limit, "offset": offset}
+        return self.request("GET", f"/v1/agents/{agent_id}/limit-orders", query=query)
+
+    def get_limit_order(self, agent_id: str, order_id: str) -> dict[str, Any]:
+        """One order, live from 1Click: fill_status, partial_fills, payouts, is_payout_status_final."""
+        return self.request("GET", f"/v1/agents/{agent_id}/limit-orders/{order_id}")
+
     def get_containment(self, agent_id: str) -> dict[str, Any]:
         return self.request("GET", f"/v1/agents/{agent_id}/containment")
 
@@ -257,6 +270,11 @@ class AgentApi:
             agent_id, "withdraw", {**request, "dry": True}, idempotency_key or create_idempotency_key()
         )
 
+    def quote_limit_order(self, agent_id: str, request: dict[str, Any]) -> dict[str, Any]:
+        """Limit-order preview: no grant, no idempotency key, no provider call, no budget charge.
+        `warnings` lists each rule a live order would fail."""
+        return self.request("POST", f"/v1/agents/{agent_id}/limit-orders", body={**request, "dry": True})
+
     def _execute(self, agent_id: str, action: str, request: dict[str, Any], idempotency_key: str) -> dict[str, Any]:
         return self.request(
             "POST", f"/v1/agents/{agent_id}/{action}", body=request, idempotency_key=idempotency_key, grant=True
@@ -264,6 +282,20 @@ class AgentApi:
 
     def swap(self, agent_id: str, request: dict[str, Any], idempotency_key: str) -> dict[str, Any]:
         return self._execute(agent_id, "swap", request, idempotency_key)
+
+    def place_limit_order(self, agent_id: str, request: dict[str, Any], idempotency_key: str) -> dict[str, Any]:
+        """Needs the grant and a key. SUCCESS means funded and resting, not filled: the order id is
+        `details.order_id`; follow it with `get_limit_order`."""
+        return self._execute(agent_id, "limit-orders", request, idempotency_key)
+
+    def cancel_limit_order(self, agent_id: str, order_id: str) -> dict[str, Any]:
+        """Needs the grant, no key. Works while frozen or after the policy drops `limit_order`;
+        the unfilled part is refunded. Returns the order's fields (possibly `{}`)."""
+        return self.request("POST", f"/v1/agents/{agent_id}/limit-orders/{order_id}/cancel", grant=True)
+
+    def cancel_all_limit_orders(self, agent_id: str) -> dict[str, Any]:
+        """Needs the grant, no key. Cancels up to 50 orders: call again until `complete` is true."""
+        return self.request("POST", f"/v1/agents/{agent_id}/limit-orders/cancel-all", grant=True)
 
     def withdraw(self, agent_id: str, request: dict[str, Any], idempotency_key: str) -> dict[str, Any]:
         return self._execute(agent_id, "withdraw", request, idempotency_key)

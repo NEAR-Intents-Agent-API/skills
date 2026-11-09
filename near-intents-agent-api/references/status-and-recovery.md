@@ -6,10 +6,10 @@
 |---|---|---|
 | `PENDING_SIGNATURE` | owner intent generated, not yet signed | get the signature or let it expire |
 | `QUEUED` | held by the policy timelock until `details.execute_after` | wait; owner may `execution_cancel` |
-| `PENDING_APPROVAL` | waiting for the owner's `approval_vote` (`details.approval_id`) | ask the owner; poll slowly |
+| `PENDING_APPROVAL` | waiting for the owner's `approval_vote` (`details.approval_id`). If its deadline passes or its authority lapses first it settles `FAILED` (`expired` / `authorization_stale`, `details.never_executed`, charge released) | ask the owner; poll slowly |
 | `PENDING_DEPOSIT` | deposit address issued, waiting for the payer's funds. **Only deposits report it** | show `deposit_address`; poll until `expires_at` (a payment after it reopens the deposit) |
 | `PROCESSING` | submitted, settlement not yet observed. Includes a withdrawal's or swap's bridge leg waiting on 1Click (`details.provider_status` keeps the provider's own state) and a provider `success` whose settlement it still reports pending | keep polling |
-| `SUCCESS` | settled with evidence | done; `details.amount_out` (delivered) is present only now, or at `REFUNDED` after a partial fill. Before that read `expected_amount_out` and treat it as an estimate |
+| `SUCCESS` | settled with evidence | done; `details.amount_out` (delivered) is present only now, or at `REFUNDED` after a partial fill. Before that read `expected_amount_out` and treat it as an estimate. A **limit order** is different: `SUCCESS` means funded and resting, not filled (`details.order_id`; see [limit-orders.md](limit-orders.md)) |
 | `REFUNDED` | route refunded the input (`refund_tx_hash`) | done; tell the user |
 | `FAILED` | never executed, or failed with `failure_code` (an unpaid deposit: `deposit_expired`, a day after `expires_at`; a native NEAR transaction NEAR finalized as failed: `native_transaction_failed`) | done; new request needs a new key |
 | `UNCERTAIN` | outcome not yet proven, **may have executed** | keep polling the same id; never resubmit under a new key |
@@ -23,6 +23,11 @@ A provider `success` with settlement still pending also reads `PROCESSING`, up t
 deadline; past it the operation reads `UNCERTAIN` with `failure_code: settlement_overdue`. Keep
 polling the same `correlation_id`. For a deposit, `details.deposit_seen_at` is when funds were first
 seen; the settlement deadline runs from there, not from when the address was issued.
+
+A limit order's operation ends at `SUCCESS` once the order is funded and resting; its fills, payouts and
+cancellation are not that operation's status. Read the order itself with
+`GET /v1/agents/{agent_id}/limit-orders/{order_id}` (`fill_status`, `partial_fills`, `payouts`,
+`is_payout_status_final`); a later cancel or fill never changes the placement's `SUCCESS`.
 
 A native NEAR transfer or call reads `PROCESSING` until two RPC operators agree NEAR finalized the
 transaction and it is exactly the request, whatever `details.provider_status` says. Then `SUCCESS`; a
@@ -51,7 +56,8 @@ GET /v1/status?correlation_id=<id>&wait_ms=30000
   `include_unpaid=true`; read one by its `op_…` id with `GET /v1/status`.
 - `details.request` on an execution's status and history echoes the request as admitted, in the
   request body's field names (`origin_asset`, `destination_asset`, `asset`, `amount`,
-  `min_amount_out`, `chain`, `recipient`, `memo`, `confidential`, each only when it applies), so a
+  `min_amount_out`, `chain`, `recipient`, `memo`, `confidential`, each only when it applies; a limit
+  order adds `side`, `price`, `quantity`, `deadline`, with `origin_asset`/`amount` what it spends), so a
   client can show a transfer's recipient or what is reserved per asset. Executions admitted before
   it was recorded have none.
 - A single long poll does not promise settlement; `SUCCESS` means reconciled evidence, not just
@@ -68,7 +74,8 @@ def settle(api, cid, deadline_s=300):
 
 ## Idempotency keys
 
-- Required on every non-dry execution and deposit; optional on `generate-intent`.
+- Required on every non-dry execution (including `placeLimitOrder`) and deposit; optional on `generate-intent`.
+  Cancelling a limit order takes none: it needs the grant only.
 - 8–128 characters from `[A-Za-z0-9._:-]`. A UUIDv4 or `"<action>:<your_request_id>"` works.
   Don't build keys from unbounded user data (length) or from values that repeat across distinct
   requests (e.g. `transfer-${agentId}-${recipient}` would block the second payment to the same
@@ -104,6 +111,7 @@ Idempotency-Key: <the ORIGINAL key>
 { "correlation_id": "op_…", "request": { "type": "withdraw", …the original body, byte-identical after canonicalization… } }
 ```
 
+A limit order is recovered the same way, with `"type": "limit_order"` and its original body.
 Authorization runs again in full: if the grant was revoked, the account frozen or the policy
 tightened since, recovery is refused. `operation_not_recoverable` means it was not eligible (not
 UNCERTAIN, already reached the provider, cross-chain deposit, or another API key);
@@ -127,7 +135,7 @@ retained audit event of one execution, each `PROVEN` with a `c2sp.org/tlog-proof
 notary-signed checkpoint of the API's transparency log, `PENDING` until the next checkpoint covers
 it, or `UNLOGGED`. Each event's `evidence` is the result it recorded, with any settlement
 transaction hashes, committed by the opening's `evidenceHash`. Use it to audit an execution without trusting the API; it does not
-change the execution's status. Verification needs a trusted checkpoint: with SDK 0.8.0, fetch a
+change the execution's status. Verification needs a trusted checkpoint: with SDK 0.8.0 or later, fetch a
 fresh head using `fetchWitnessCheckpoint(apiUrl, origin, witnessPublicKey)`, request the proof
 with `?from_size=` set to that head's size, and call `verifyOperationProof(proof, origin, head)`.
 Pin the origin (`<API host>/log`, `api.agentsonintents.com/log` for the hosted API) and the

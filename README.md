@@ -15,7 +15,7 @@
 A skill for coding agents (Claude Code, Claude.ai, Codex, Cursor, Copilot, Gemini CLI, …) that
 knows the [NEAR Intents Agent API](https://api.agentsonintents.com/llms.txt): give every AI agent
 its own agent account on NEAR Intents, let the end user sign the rules once with their own
-wallet, and let the agent swap, transfer, withdraw and receive funds inside those rules. Works for
+wallet, and let the agent swap, place limit orders, transfer, withdraw and receive funds inside those rules. Works for
 TypeScript, Python, Rust, Go or anything that speaks HTTP.
 
 ```
@@ -24,12 +24,12 @@ TypeScript, Python, Rust, Go or anything that speaks HTTP.
  partner API key                   wallet: NEAR / EVM / passkey      ngt_ grant token (held by your backend)
  prepares owner actions   ──────►  signs: create account, policy,
  stores grant tokens               grants, freeze, approve, delete
- calls executions         ◄─────────────────────────────────────────  swap / transfer / withdraw / deposit
+ calls executions         ◄─────────────────────────────────────────  swap / limit order / transfer / withdraw / deposit
                                                                        … only inside the owner-signed policy
 ```
 
 - **Policy = what** may happen: actions, assets, per-asset limits, destinations, USD budget,
-  timelock, weekly schedule, owner approval, freeze.
+  limit-order price bound, timelock, weekly schedule, owner approval, freeze.
 - **Grant = who** may act: one revocable token per session, assistant or bot.
 - Your backend never holds the owner's key, the browser never sees your API key, and the model
   never sees either.
@@ -108,6 +108,7 @@ near-intents-agent-api/
 │   ├── sign-intent.md           sign-intent / sign-in / sign-transfer with the agent's EVM and Solana keys
 │   ├── grants.md                tokens, commitments, storage, revocation, patterns
 │   ├── executions.md            swap, withdraw, transfer, shield, deposit, quotes, chains
+│   ├── limit-orders.md          resting limit orders: place, follow, cancel, price bound, containment
 │   ├── status-and-recovery.md   statuses, polling, idempotency, UNCERTAIN, /recover
 │   ├── errors.md                every error code and what to do
 │   ├── architecture.md          data model, jobs, key ownership models, AI tools, security checklist

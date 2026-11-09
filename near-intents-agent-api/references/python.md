@@ -28,7 +28,8 @@ Methods: `generate_intent`, `submit_intent`, `get_status(cid, wait_ms, refresh)`
 `wait_for_status(cid, deadline_s)`, `list_agents`, `get_agent`, `get_balances(agent_id, source, asset)`,
 `get_policy`, `list_grants`, `get_history`, `list_scheduled`, `list_approvals`,
 `get_containment`, `quote_swap`, `quote_withdraw`, `swap`, `withdraw`, `transfer`, `shield`,
-`unshield`, `deposit`, `recover`, plus the generic `request(method, path, query=, body=, idempotency_key=, grant=)`
+`unshield`, `deposit`, `recover`, the limit-order methods (`quote_limit_order`, `place_limit_order`,
+`list_limit_orders`, `get_limit_order`, `cancel_limit_order`, `cancel_all_limit_orders`), plus the generic `request(method, path, query=, body=, idempotency_key=, grant=)`
 for anything else. Responses are plain dicts with the API's snake_case fields.
 
 Helpers: `create_idempotency_key()`, `create_grant_credential()` → `{token, commitment}`,
@@ -81,6 +82,21 @@ key = create_idempotency_key()                                   # persist with 
 op = agent.swap(agent_id, {"origin_asset": "nep141:wrap.near", "destination_asset": usdc,
                            "amount": to_atomic("0.1", 24)}, idempotency_key=key)
 final = api.wait_for_status(op["correlation_id"])
+```
+
+Limit orders (see [limit-orders.md](limit-orders.md)):
+
+```python
+order = {"base_asset": "nep141:wrap.near", "quote_asset": usdt, "side": "sell",
+         "quantity": to_atomic("1", 24), "price": "5.2"}               # price: quote units per whole base
+agent.quote_limit_order(agent_id, order)                              # dry: no grant, no key
+key = create_idempotency_key()                                        # persist with the body first
+op = agent.place_limit_order(agent_id, order, idempotency_key=key)
+done = api.wait_for_status(op["correlation_id"])                      # SUCCESS = funded and resting, not filled
+order_id = done["details"]["order_id"]
+live = api.get_limit_order(agent_id, order_id)                        # fill_status, partial_fills, payouts
+agent.cancel_limit_order(agent_id, order_id)                          # grant, no key
+while not agent.cancel_all_limit_orders(agent_id)["complete"]: pass   # 50 a call
 ```
 
 ## Errors

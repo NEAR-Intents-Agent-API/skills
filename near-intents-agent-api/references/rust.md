@@ -75,8 +75,10 @@ let op = agent.execute(&agent_id, "swap", &json!({
 let final_status = api.wait_for_status(op["correlation_id"].as_str().unwrap(), std::time::Duration::from_secs(300)).await?;
 ```
 
-`execute` covers `swap`, `withdraw`, `transfer`, `shield`, `unshield`; `deposit` has its own
-method (no grant).
+`execute` covers `swap`, `limit-orders` (a live order), `withdraw`, `transfer`, `shield`, `unshield`;
+`deposit` has its own method (no grant). Limit orders also have `quote_limit_order` (dry, no
+grant), `list_limit_orders`, `get_limit_order`, `cancel_limit_order` and `cancel_all_limit_orders`
+(grant, no key; repeat until `complete`); see [limit-orders.md](limit-orders.md).
 
 ## Errors
 

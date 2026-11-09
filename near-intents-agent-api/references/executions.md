@@ -1,11 +1,13 @@
 # Executions: moving money
 
 All are `POST /v1/agents/{agent_id}/<action>` and return `202` with a `StatusResponse`
-(`correlation_id: "op_…"`), except dry quotes (`200`).
+(`correlation_id: "op_…"`), except dry quotes (`200`). Limit orders live at
+`POST …/limit-orders`; see [limit-orders.md](limit-orders.md).
 
 | Action | Headers | Body | Policy needs |
 |---|---|---|---|
 | `swap` | key, grant, idem | `origin_asset`, `destination_asset`, `amount`, `min_amount_out?`, `confidential?`, `dry?` | `swap` (+`confidential`) |
+| `limit-orders` | key, grant, idem | `base_asset`, `quote_asset`, `side`, `quantity`, `price`, `deadline?`, `confidential?`, `dry?` | `limit_order` (+`confidential`) |
 | `withdraw` | key, grant, idem | `asset`, `amount`, `chain`, `recipient`, `memo?`, `confidential?`, `async?`, `dry?` | `withdraw`, destination allowed |
 | `transfer` | key, grant, idem | `asset`, `amount`, `recipient`, `confidential?` | `transfer`, destination allowed |
 | `shield` / `unshield` | key, grant, idem | `asset`, `amount` | `confidential: true` |
@@ -21,20 +23,22 @@ address for its chain is refused with `400 invalid_address` before the policy is
 ```json
 POST …/swap      { "origin_asset": "nep141:wrap.near", "destination_asset": "<usdc>", "amount": "1000000000000000000000000", "dry": true }
 POST …/withdraw  { "asset": "<usdc>", "amount": "5000000", "chain": "base", "recipient": "0xabc…", "dry": true }
-→ 200 { "dry": true, "type": "swap" | "withdraw", "quote": { …1Click quote, snake_cased… },
+→ 200 { "dry": true, "type": "swap" | "withdraw" | "limit_order", "quote": { …1Click quote, snake_cased… },
         "spend": { "amount_usd": string | null, "budget": { "daily": {…}, "weekly": {…}, "monthly": {…} } },
         "fee": { "amount_usd": string, "percent": string } | null,
         "warnings": [ { "code": "high_fee" | "asset_delivered_as_is"
                               | "policy_action_denied" | "policy_destination_denied" | "policy_asset_denied"
                               | "policy_transaction_limit_exceeded" | "policy_schedule_denied" | "spend_price_unavailable" | "spend_budget_exceeded"
                               | "policy_limit_exceeded" | "policy_action_limit_exceeded" | "policy_usage_unavailable"
-                              | "insufficient_balance",
+                              | "insufficient_balance"
+                              | "amount_too_low" | "policy_price_deviation_exceeded" | "market_price_unavailable",   // the last three: limit orders
                         "detail": string, "available_at"?: string, "available_amount"?: string } ],
         "owner_approval": boolean }   // true: the live request waits in PENDING_APPROVAL for the owner
 ```
 
 Dry runs charge no budget, reserve none and move nothing. A swap quote needs no grant and no
-idempotency key. A withdrawal preview needs the grant and an `Idempotency-Key`: the same key replays
+idempotency key; nor does a limit-order preview, which makes no provider call (its `quote` is the
+API's own: what the order spends and the least a full fill delivers). A withdrawal preview needs the grant and an `Idempotency-Key`: the same key replays
 an identical preview for 60 s, an expired one needs a new key. The API sets no preview cap: every preview that
 reaches the provider counts toward the wallet's 1,000 custody operations per rolling 24 h
 (`provider_limit_reached` when spent; swap quotes do not count). The `quote`
@@ -49,7 +53,8 @@ policy's action switch and destination rule, `assets`, `limits.per_transaction`,
 Each one it would fail is a `warnings` entry whose `code` is the code the live request
 would get (`policy_action_denied`, `policy_destination_denied`, `policy_asset_denied`,
 `policy_transaction_limit_exceeded`, `policy_schedule_denied`, `spend_price_unavailable`, `spend_budget_exceeded`, `policy_limit_exceeded`,
-`policy_action_limit_exceeded`, `policy_usage_unavailable`, `insufficient_balance`).
+`policy_action_limit_exceeded`, `policy_usage_unavailable`, `insufficient_balance`; for a limit order
+also `amount_too_low`, `policy_price_deviation_exceeded`, `market_price_unavailable`).
 `policy_schedule_denied` also carries `available_at`, when the schedule next
 allows it; `insufficient_balance` carries `available_amount`, what the balance can still spend (atomic
 units). Only the live request is refused with these codes.
@@ -112,7 +117,8 @@ Then poll `GET /v1/status?correlation_id=op_…&wait_ms=30000` (see
 - route refunded: `REFUNDED` (`details.refund_tx_hash`); never filled: `FAILED` with `failure_code`
 
 The execution call holds the HTTP request open up to ~2 minutes while the provider answers; give
-the client a ~150 s timeout. `withdraw` with `async: true` returns as soon as it is accepted.
+the client a ~150 s timeout (the SDK gives a live `swap`, `placeLimitOrder`, `withdraw`, `transfer`, `shield` and
+`unshield` that budget). `withdraw` with `async: true` returns as soon as it is accepted.
 
 ## Swap
 
@@ -131,6 +137,12 @@ the client a ~150 s timeout. `withdraw` with `async: true` returns as soon as it
   (`one_click`). With `meta.retryable`, repeat the same request with the same key after
   `Retry-After`; without it the refusal is recorded, so use a new key once `one_click` reports ok.
 
+## Limit order
+
+A resting order on the agent's public balance (`confidential: true` for the confidential one). `SUCCESS`
+means funded and resting, not filled: the order id is `details.order_id`. Placing, following and cancelling
+one is covered in [limit-orders.md](limit-orders.md).
+
 ## Withdraw
 
 - Leaves NEAR Intents to `recipient` on `chain`. Public and confidential withdrawals reach every
@@ -142,7 +154,9 @@ the client a ~150 s timeout. `withdraw` with `async: true` returns as soon as it
   1Click, which unwraps it. There is no option to withdraw wNEAR to chain `near`.
 - `unsupported_chain` means a chain the catalog doesn't list; `route_unavailable` means no
   liquidity for that asset now; `invalid_address` when the address is not valid for the chain or the provider rejects it
-  (a malformed one is refused before the policy is read).
+  (a malformed one is refused before the policy is read). A token withdrawal to a NEAR account with no
+  storage on that token's contract is `invalid_address` with status 409, a preview too: register the
+  receiver's storage first (NEP-145 `storage_deposit`), or move the funds inside NEAR Intents.
 - Moving funds to your own account on another chain or venue (your Hyperliquid or Polymarket
   address, say) counts against the USD budget like any withdrawal, and a deposit back does not
   credit it.
@@ -226,7 +240,7 @@ Only for `UNCERTAIN` operations that provably never reached the provider (no
 1. `GET …/policy` in force? action allowed? destination listed? budget `remaining_usd` enough?
 2. Balance enough? Read `available` / `available_raw` on `GET …/balances` (balance less queued or
    timelocked work not yet dispatched); don't subtract queued work yourself.
-3. Dry quote (swap/withdraw) and show it, with `fee` and `warnings`. A rule or check code in
+3. Dry quote (swap/limit order/withdraw) and show it, with `fee` and `warnings`. A rule or check code in
    `warnings` means the live call would be refused with it: stop or adjust before sending. A refused
    quote (`wallet_frozen`, `agent_archived`, `agent_deleted`) means the account can do nothing.
 4. Create + persist the idempotency key and body, then send.

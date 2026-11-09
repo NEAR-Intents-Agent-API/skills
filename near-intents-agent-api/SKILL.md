@@ -1,12 +1,12 @@
 ---
 name: near-intents-agent-api
-description: Build on the NEAR Intents Agent API (api.agentsonintents.com) in any language — TypeScript, Python, Rust, Go or plain HTTP. Use when integrating AI-agent wallets on NEAR Intents into an app or backend, when code mentions partner API keys (`X-API-Key`), `ngt_` grant tokens, `X-Grant-Token`, `generate-intent`/`submit-intent`, `@near-intents-agent-api/sdk`, `sign-intent`/`sign-in`/`sign-transfer` native routes, owner-signed spending policies, agent swaps/transfers/withdrawals/deposits, or when someone wants an AI agent to hold and move funds under owner-set limits.
+description: Build on the NEAR Intents Agent API (api.agentsonintents.com) in any language — TypeScript, Python, Rust, Go or plain HTTP. Use when integrating AI-agent wallets on NEAR Intents into an app or backend, when code mentions partner API keys (`X-API-Key`), `ngt_` grant tokens, `X-Grant-Token`, `generate-intent`/`submit-intent`, `@near-intents-agent-api/sdk`, `sign-intent`/`sign-in`/`sign-transfer` native routes, owner-signed spending policies, agent swaps/limit orders/transfers/withdrawals/deposits, or when someone wants an AI agent to hold and move funds under owner-set limits.
 ---
 
 # NEAR Intents Agent API
 
 A backend HTTP API that gives each AI agent its own **agent account on NEAR Intents**. The end
-user (the **owner**) signs the rules once with their own wallet; the agent then swaps, transfers
+user (the **owner**) signs the rules once with their own wallet; the agent then swaps, places limit orders, transfers
 and withdraws on its own, inside those rules, with no further signatures. Your backend holds one
 partner API key and never touches anyone's private keys.
 
@@ -36,6 +36,7 @@ Follow these in every integration; most bugs and lost-fund incidents come from b
    and `asset_id` from `GET /v1/tokens`. Never use floats. Amounts that move funds must be > 0.
 4. **Every money-moving call carries an `Idempotency-Key`** (8–128 chars `[A-Za-z0-9._:-]`).
    Create it, persist it with the request, *then* send. Retry only with the same key and body.
+   A live `placeLimitOrder` carries one; cancelling an order needs the grant only.
 5. **`UNCERTAIN` means the outcome is not yet proven ("maybe executed").** Keep polling the original `correlation_id`. Never
    resubmit with a new key; `/recover` is only for provably-undispatched operations. An
    execution the provider may have received answers `202 UNCERTAIN`. A server failure
@@ -63,7 +64,12 @@ Follow these in every integration; most bugs and lost-fund incidents come from b
     deadline (300 s, or up to 96 h when it pays only 1Click deposits). Treat the payload like cash,
     sign only what is due soon, and tell the owner. `sign-intent` has its own `receivers` rules; the
     account's `destinations`, limits and budget do not apply ([references/sign-intent.md](references/sign-intent.md)).
-13. **Show the owner the required risk notice.** Before the owner signs `agent_create`, show the
+13. **A resting limit order is not a finished trade.** `SUCCESS` on `placeLimitOrder` means the order is
+    funded and resting (`details.order_id`), not filled: poll `GET …/limit-orders/{order_id}` for
+    `fill_status` and fills, and cancel it with the grant when it should stop. A freeze, or a policy that
+    drops `limit_order`, makes the API cancel the agent's open orders, and an agent with an order not yet
+    payout-final cannot be deleted ([references/limit-orders.md](references/limit-orders.md)).
+14. **Show the owner the required risk notice.** Before the owner signs `agent_create`, show the
     Owner Terms, OutLayer's terms and the notice, and keep evidence of acceptance. Show the notice
     again before the owner funds the wallet. For `agent_create`, `preview.summary` ends with it.
 
@@ -97,8 +103,8 @@ owner signs ──► agent_create (policy) ──► grant_issue (token commitm
 3. **Fund** — `POST /v1/agents/{agent_id}/deposit {origin_asset}` (API key + Idempotency-Key, no
    grant; `amount` optional) returns `details.deposit_address`, `min_amount`, `expires_at`,
    optional `memo`, and `refund_to` (the agent's own balance).
-4. **Act** — `POST /v1/agents/{agent_id}/swap|transfer|withdraw|shield|unshield` with
-   `X-API-Key`, `X-Grant-Token`, `Idempotency-Key`. Quote first with `dry: true`: a swap quote needs only `X-API-Key`; a withdrawal preview needs
+4. **Act** — `POST /v1/agents/{agent_id}/swap|limit-orders|transfer|withdraw|shield|unshield` with
+   `X-API-Key`, `X-Grant-Token`, `Idempotency-Key`. Quote first with `dry: true`: a swap or limit-order quote needs only `X-API-Key`; a withdrawal preview needs
    the grant and a key, like the withdrawal (the API sets no preview cap; the provider's 1,000 custody
    operations per rolling 24 h apply). The account's rules do not refuse a quote: it
    returns `spend`, `fee` and `warnings`, and each rule the live call would fail is a warning under
@@ -107,7 +113,8 @@ owner signs ──► agent_create (policy) ──► grant_issue (token commitm
    provider call and without using an attempt. Read `warnings`
    before executing. An archived, deleted or frozen account gets no quote: it is refused with the
    code the live request gets (`agent_archived`, `agent_deleted`, `wallet_frozen`).
-5. **Observe** — `GET /v1/status?correlation_id=…&wait_ms=30000` until it stops moving.
+5. **Observe** — `GET /v1/status?correlation_id=…&wait_ms=30000` until it stops moving. A limit order
+   that reached `SUCCESS` is resting, not filled: follow it with `GET /v1/agents/{agent_id}/limit-orders/{order_id}`.
 
 Every owner action (policy edits, freeze, grant revoke, approval votes, cancel, delete) is the
 same generate → sign → submit → status loop.
@@ -132,9 +139,10 @@ The Python and Rust signers are verified byte-for-byte against near-api-js and v
 | Every endpoint, header, shape, pagination | [references/http-api.md](references/http-api.md) |
 | Run owner actions, previews, expiry, cooldowns, BFF split | [references/owner-intents.md](references/owner-intents.md) |
 | Sign `nep413` / `nep366` / `eip712` / `webauthn` correctly | [references/signing.md](references/signing.md) |
-| Write or edit a policy (limits, destinations, USD budget, timelock, schedule, approval) | [references/policy.md](references/policy.md) |
+| Write or edit a policy (actions, limits, destinations, USD budget, limit-order price bound, timelock, schedule, approval) | [references/policy.md](references/policy.md) |
 | Issue, use, store, revoke grants | [references/grants.md](references/grants.md) |
 | Swap, transfer, withdraw, deposit, shield, quotes, chains | [references/executions.md](references/executions.md) |
+| Place, follow and cancel limit orders (resting orders, price bound, containment, delete guard) | [references/limit-orders.md](references/limit-orders.md) |
 | Statuses, polling, idempotency, `UNCERTAIN`, `/recover`, operation proofs | [references/status-and-recovery.md](references/status-and-recovery.md) |
 | Sign NEAR Intents payloads, Solana logins or transfers with the agent's EVM/Solana key (`sign-intent`, `sign-in`, `sign-transfer`) | [references/sign-intent.md](references/sign-intent.md) |
 | Handle an error code | [references/errors.md](references/errors.md) |

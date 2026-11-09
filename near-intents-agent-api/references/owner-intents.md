@@ -18,10 +18,10 @@ The API builds the exact bytes, so the partner never assembles anything security
 |---|---|---|
 | `agent_create` | `name`, `external_user_id?`, `owner`, `policy` (no `agent_id`) | reserves a `PENDING` agent and returns its `agent_id` immediately |
 | `policy_update` | `policy` (complete), `expected_revision` (current applied revision) | 10-min cooldown between ordinary changes |
-| `agent_freeze` | — | emergency stop; immediate; never throttled |
+| `agent_freeze` | — | emergency stop; immediate; never throttled; the API then cancels the agent's open limit orders |
 | `agent_unfreeze` | — | own cooldown (`agent_unfreeze_throttled`) |
 | `agent_archive` / `agent_restore` | — | hides/unhides from default lists; nothing changes on chain. `agent_archive` needs a frozen account, and `agent_restore` needs an unfrozen one; otherwise `pause_before_archive` / `unpause_before_restore` |
-| `agent_delete` | — | `preview.deletion` lists balances and `assets_lost`; withdraw first, there is no sweep. It does not read the custody account's native NEAR (that goes to the sponsor, `beneficiary`) and does not inventory native accounts (native NEAR, EVM, Solana): tell the owner to move native funds first. Any public or confidential balance refuses it (`deletion_assets_remaining`), whatever the preview showed when the owner signed. The API reads the balances again right before it commits: funds that arrived since fail the deletion with `deletion_assets_remaining`, an unreadable balance with `provider_unavailable`. Both are recorded `failed`, nothing is retired and the agent stays archived and restorable. A signature from a deletion that was later restored is refused with `owner_command_stale`: sign again. Open deposit addresses never block it: deletion closes them (`agent_deleted`), and funds sent later are lost |
+| `agent_delete` | — | `preview.deletion` lists balances and `assets_lost`; withdraw first, there is no sweep. `open_limit_orders` counts resting limit orders; while any is not payout-final it is refused with `limit_orders_open` (checked before `deletion_assets_remaining`): cancel them, or freeze, which cancels them, and let them settle. It does not read the custody account's native NEAR (that goes to the sponsor, `beneficiary`) and does not inventory native accounts (native NEAR, EVM, Solana): tell the owner to move native funds first. Any public or confidential balance refuses it (`deletion_assets_remaining`), whatever the preview showed when the owner signed. The API reads the balances again right before it commits: funds that arrived since fail the deletion with `deletion_assets_remaining`, an unreadable balance with `provider_unavailable`. Both are recorded `failed`, nothing is retired and the agent stays archived and restorable. A signature from a deletion that was later restored is refused with `owner_command_stale`: sign again. Open deposit addresses never block it: deletion closes them (`agent_deleted`), and funds sent later are lost |
 | `grant_issue` | `label`, `credential` (sha256 hex of token), `expires_at` (≤365 days) | see [grants.md](grants.md) |
 | `grant_revoke` | `grant_id` | committed operations still finish |
 | `execution_cancel` | `correlation_id` of a `QUEUED` op | only while the timelock holds it |
@@ -40,7 +40,7 @@ The API builds the exact bytes, so the partner never assembles anything security
   preview: {
     summary: string,
     revision?, previous_revision?, policy_hash?, policy?,   // policy changes
-    deletion?: { near_account_id, beneficiary, public[], confidential[], assets_lost, retirement },
+    deletion?: { near_account_id, beneficiary, public[], confidential[], open_limit_orders, assets_lost, retirement },
     approval?: { approval_id, request_type, request_hash, verdict }
   }
 }
@@ -76,7 +76,7 @@ to a minute; off-chain ones settle almost immediately.
 
 | Owner | Change enforced by provider (on chain) | Change enforced by API (off chain) |
 |---|---|---|
-| NEAR | `nep366` delegate action (sponsor pays gas): `agent_create`, provider policy edits, freeze/unfreeze | `nep413`: destinations/budget/timelock/schedule-only edits, grants, cancel, archive, votes, … |
+| NEAR | `nep366` delegate action (sponsor pays gas): `agent_create`, provider policy edits, freeze/unfreeze | `nep413`: destinations/budget/timelock/schedule/`limit_order.max_deviation_bps`-only edits, grants, cancel, archive, votes, … |
 | EVM | `eip712` | `eip712` |
 | Passkey | `webauthn` | `webauthn` |
 
@@ -139,6 +139,7 @@ Adapt to your wallet library's result shape (near-connect / wallet-selector retu
 | `owner_key_not_full_access` (403) | NEAR key is a function-call key → use a FullAccess key |
 | `owner_nonce_invalid` | intent already used/expired → generate again |
 | `owner_command_stale` (409) | the intent was signed for an earlier owner state, or is the signature of a deletion that was later restored → generate again and sign again |
+| `limit_orders_open` (409) | `agent_delete`: a limit order is not payout-final yet → cancel or let it settle, then delete again |
 | `deletion_assets_remaining` (409) | `agent_delete`: the wallet still holds a public or confidential balance → withdraw it, then delete again |
 | `policy_revision_conflict` (409) | re-read `GET …/policy`, regenerate with its `revision`, re-sign |
 | `policy_reconciliation_required` | another policy intent is still open → wait for it to settle/expire |
@@ -184,7 +185,7 @@ charge (`FAILED`, `details.never_executed`). `approve` re-runs the admission che
 revoked or expired grant, a frozen or changed policy, or a destination no longer allowed refuses
 the vote (`authorization_stale`, `wallet_frozen`, `policy_destination_denied`), nothing is
 sent, and the request stays held for a `reject` while the refusal can still clear (a frozen
-account). A refusal that can never clear ends it: once the policy, owner or lifecycle moved on or
+account). A held limit order's price is judged against the market again when the vote releases it. A refusal that can never clear ends it: once the policy, owner or lifecycle moved on or
 the grant was revoked or expired, it fails `authorization_stale`; once the approval's
 `expires_at` passes, it fails `expired`. Either way it settles `FAILED` with
 `details.never_executed`, the charge is released, it leaves `GET …/approvals`, and a later

@@ -27,12 +27,16 @@ Every error is a JSON:API document:
   attempt took effect; a new key is allowed only after a proven refusal (retry rule 4). Never
   decide from `detail`.
 - `meta.available_at` → when a cooldown/quota/throttle lifts. 429/503 also send `Retry-After`.
-- `meta.min_amount` → on `amount_too_low` only, when the provider states the route minimum as a
+- `meta.min_amount` → on `amount_too_low`, when the provider states the route minimum as a
   whole number: that minimum in atomic units of the asset sent. Quote at least that. Absent → the
   provider gave no number; quote a larger amount. A refusal recorded on an operation keeps it as
-  `details.min_amount`.
+  `details.min_amount`. On a limit order the API's own 0.1 USD check states it for a `sell` only
+  (`quantity` is what a sell spends; a buy's `quantity` is the other asset). On
+  `custody_native_balance_required` it is what the call costs, in yoctoNEAR.
 - `meta.available_amount` (SDK 0.7: `error.availableAmount`) → on `insufficient_balance` only, when known: what the balance can still
-  spend, in atomic units (the balances route's `available_raw`). Send at most that, or fund.
+  spend, in atomic units (the balances route's `available_raw`). Send at most that, or fund. On
+  `custody_native_balance_required` it is what the agent's own NEAR account holds, in yoctoNEAR; a
+  failed operation keeps it as `details.available_amount`.
 - Unknown code → fall back to its `layer` and the HTTP status class. Always log `meta.request_id`.
 
 ## Layers
@@ -71,6 +75,8 @@ Every error is a JSON:API document:
 | `spend_budget_exceeded` | `budget` | 403 | shared USD budget used up. A plain refusal for a request that runs now: no operation, no `FAILED` status, no charge (a timelocked one released over budget ends `FAILED`). Wait for the period to end (`usage.budget.*.resets_at`, or `spend.budget` on a dry run: the whole cap is back then) or owner raises cap, then send the request again |
 | `policy_limit_exceeded` | `policy` | 403 | the asset's hourly/daily/monthly limit would be passed (shield/unshield count too). Plain refusal, nothing recorded → wait for the window or owner raises it, then send again |
 | `policy_action_limit_exceeded` | `policy` | 403 | `max_actions_per_hour` used up. Plain refusal → wait for the hour or owner raises it, then send again |
+| `policy_price_deviation_exceeded` | `policy` | 403 | limit order priced worse than the market by more than `limit_order.max_deviation_bps` (default 100; a sell too far below, a buy too far above), `source.pointer` `/price`; nothing submitted or charged → price closer to the market, or owner changes `limit_order.max_deviation_bps` |
+| `market_price_unavailable` | `policy` | 503 | limit order: no fresh USD price for `/base_asset` or `/quote_asset`, so the price cannot be checked; nothing submitted or charged. No `meta.retryable` flag → send again under a new key once `GET /v1/tokens` prices both assets |
 | `policy_usage_unavailable` | `policy` | 409 | earlier actions have no per-asset count and a limit applies; nothing recorded or sent → clears when they leave the window, or the operator reconciles them |
 | `policy_denied` | `policy` | 409 | provider-side policy refused (asset, per-asset limit, hourly rate, …) → owner `policy_update` |
 | `wallet_frozen` | `policy` | 409 | owner froze the account → only `agent_unfreeze` resumes |
@@ -89,13 +95,16 @@ Every error is a JSON:API document:
 | `provider_signature_invalid` | `provider` | 502 | the wallet provider's signature did not verify against the agent's key and was discarded; nothing returned → ask again, report `request_id` if it repeats |
 | **Execution / routing** | | | |
 | `insufficient_balance` | `balance` | 400/409 | the balance the request spends from (public or confidential) holds less than it spends; nothing submitted or charged. `meta.available_amount` is what it can still spend → fund the account or send at most that. The API's own check is 400 with no history row; a provider refusal is 409 |
-| `amount_too_low` | `request` | 400 | below route minimum → quote at least `meta.min_amount` (atomic units of the asset sent) when present, else a larger amount |
+| `amount_too_low` | `request` | 400/409 | below the minimum → quote at least `meta.min_amount` (atomic units of the asset sent) when present, else a larger amount. 400: the API's own check (a limit order worth under 0.1 USD, `source.pointer` `/quantity`; a deposit quote); 409: the provider's route minimum |
+| `limit_order_not_found` | `request` | 404 | `GET`/cancel of an order id that is not this agent's → read `GET …/limit-orders` for the ids |
+| `limit_orders_open` | `api` | 409 | `agent_delete`: an order is not payout-final yet; checked before `deletion_assets_remaining`, and a fill or refund would land in a deleted account → cancel the orders (or freeze, which cancels them), wait until each `is_payout_status_final`, then delete (see [limit-orders.md](limit-orders.md)) |
+| `custody_native_balance_required` | `balance` | 409 | the agent's own NEAR account holds less NEAR than the call costs; nothing sent. `meta.available_amount` (held) and `meta.min_amount` (cost) are in yoctoNEAR → fund that account, then a **new** key |
 | `route_unavailable` | `provider` | 409 (400 on deposit) | no route or liquidity for this pair or amount; nothing submitted. Repeating the request won't help → try a different amount or pair under a new key |
-| `unsupported_chain`, `unsupported_token`, `invalid_address` | `request` | 400/409 | change chain/asset/address. `invalid_address`: the recipient is not a valid address for the chain (refused before the policy is read), the provider refused it, or a `transfer` recipient is a named NEAR account that does not exist. Nothing was sent |
+| `unsupported_chain`, `unsupported_token`, `invalid_address` | `request` | 400/409 | change chain/asset/address. `invalid_address`: the recipient is not a valid address for the chain (refused before the policy is read), the provider refused it, a `transfer` recipient is a named NEAR account that does not exist, or (409) a token withdrawal goes to a NEAR account with no storage on that token's contract (a preview too: register its storage, or move the funds inside NEAR Intents). Nothing was sent |
 | `near_rpc_unavailable` | `api` | 503 | `transfer` only: NEAR RPC did not answer, so a named recipient could not be checked; retryable, nothing sent → retry the same request (same key) shortly |
 | `wallet_busy` | `provider` | 409 | another money op on this wallet is running; nothing sent, refusal recorded (not retryable) → after it finishes, a **new** key |
 | `spend_price_unavailable` | `budget` | 503 | no fresh USD price for budget accounting. Plain refusal, nothing recorded → send again once `GET /v1/tokens` shows a price |
-| `authorization_stale` | `auth` | 409 | grant/key revoked or policy/owner changed between admission and dispatch → re-evaluate |
+| `authorization_stale` | `auth` | 409 | grant/key revoked or policy/owner changed between admission and dispatch → re-evaluate. A request held for owner approval whose authority lapsed settles `FAILED` with it (`details.never_executed`, charge released); a later approve vote is refused with it |
 | `deposit_quota_exceeded` | `api` | 429 | 100 deposit addresses / 24 h for this agent → wait `available_at` |
 | **Provider (wallet service/1Click) state** | | | |
 | `provider_unavailable` | `provider` | 503 | the provider or the quote service behind it did not answer → read `/v1/network` (`one_click`). With `meta.retryable`: same request, same key, after `Retry-After`. Without it the refusal is recorded (nothing submitted): new key once the provider is ok |
@@ -125,7 +134,8 @@ Every error is a JSON:API document:
 | `sponsor_busy`, `sponsor_balance_insufficient` | `api` | 503 | retry the same submit later |
 | `transaction_unconfirmed` | `api` | 503 | retryable; broadcast but unconfirmed → poll status, or repeat with the **same** key (never sends twice); never as new work |
 | `execution_not_cancellable` | `request` | 409 | op already left `QUEUED` |
-| `approval_closed`, `approval_already_voted`, `approval_not_allowed` | `request`/`auth` | 409 | read the approval's current state |
+| `approval_closed`, `approval_already_voted`, `approval_not_allowed` | `request`/`auth` | 409 | read the approval's current state. A held approval that lapsed settles `FAILED` with `authorization_stale` or `expired` (`details.never_executed`, charge released); voting on it is `approval_closed` |
+| `approval_not_recorded` | `request` | 409 | an approve vote for a request the API has no record of yet (settlement has not observed it); consumes nothing → send the same signed vote again in a few minutes. A reject needs no record |
 | `approval_signature_invalid` | `auth` | 401 | the vote was not signed by the owner's key or wallet → regenerate and sign again |
 | `approval_vote_unsupported` | `provider` | 409 | the provider lists no such owner wallet build on this network → ask the operator; nothing was stored |
 | **Grants** | | | |
@@ -146,12 +156,17 @@ until then `PROCESSING`. A finalized failure is `FAILED` with `native_transactio
 `native_transaction_mismatch`; one NEAR still does not know 30 minutes after dispatch is `NEEDS_REVIEW` with
 `native_transaction_unconfirmed`. Stop and review those; see [status-and-recovery.md](status-and-recovery.md).
 
-**Dry runs warn with the live codes.** The account's rules do not refuse a swap quote or withdrawal
+**Failed policy writes are statuses too.** A `policy_update` (or `agent_create`) whose transaction was relayed but
+whose inner receipt failed settles `FAILED` with `failure_code: "policy_transaction_failed"`: the revision was not
+applied. Read `GET …/policy`, fix the cause, then generate and sign a new intent.
+
+**Dry runs warn with the live codes.** The account's rules do not refuse a swap quote, limit-order preview or withdrawal
 preview (`dry: true`): it returns `200`. Each one the live request would fail is a `warnings[]` entry
 whose `code` is the live code: `policy_action_denied`, `policy_destination_denied`,
 `policy_asset_denied`, `policy_transaction_limit_exceeded`, `policy_schedule_denied` (with `available_at`), `spend_price_unavailable`,
 `spend_budget_exceeded`, `policy_limit_exceeded`, `policy_action_limit_exceeded`,
-`policy_usage_unavailable` or `insufficient_balance` (with `available_amount`), with the same meaning
+`policy_usage_unavailable` or `insufficient_balance` (with `available_amount`), and for a limit order
+`amount_too_low`, `policy_price_deviation_exceeded` or `market_price_unavailable`, with the same meaning
 and the same layer to change. Such a code in `warnings` means the live request will be refused with
 it: tell the user, reduce the amount, wait, or ask the owner to change the policy. An asset
 `GET /v1/tokens` does not list (`unsupported_token`) or an invalid recipient (`invalid_address`)

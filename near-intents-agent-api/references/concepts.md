@@ -20,7 +20,7 @@ The API splits that into three roles:
 agent account (1 per agent)
 ├── owner         one wallet: NEAR | EVM | passkey   (fixed at creation, no rotation)
 ├── policy        ONE complete, owner-signed rulebook: WHAT may happen
-│   actions, assets, limits, destinations, USD budget, timelock, approval, frozen
+│   actions, assets, limits, destinations, USD budget, limit-order price bound, timelock, approval, frozen
 └── grants        0..50 live grants: WHO may act
     each = { grant_id, label, expires_at, sha256(token) }  — token held by the partner
 ```
@@ -32,7 +32,8 @@ agent account (1 per agent)
   It carries identity and expiry only. Revoke it to cut off that one actor.
 - **Freeze** stops everyone (policy `frozen: true`) and takes effect at once. It refuses new
   requests; it does not recall a `sign-intent` payload already signed, which stays publishable until
-  its deadline ([sign-intent.md](sign-intent.md)).
+  its deadline ([sign-intent.md](sign-intent.md)). It also makes the API cancel the agent's open limit
+  orders ([limit-orders.md](limit-orders.md)).
 
 When an execution is refused, the error code names what refused it and `layer` whose rule it was
 (`grant`, `policy`, `budget`, `balance`, …); only that layer can lift it:
@@ -45,6 +46,8 @@ When an execution is refused, the error code names what refused it and `layer` w
 | `policy_destination_denied` | policy `destinations` | owner `policy_update` |
 | `spend_budget_exceeded` | policy `budget` (USD, shared, per day/week/month) | owner raises cap, or wait until `resets_at` (when the period ends and the whole cap is back) |
 | `policy_limit_exceeded`, `policy_action_limit_exceeded` | policy `limits` (hourly/daily/monthly) / `max_actions_per_hour`, counted by the API | owner raises the limit, or wait for the window |
+| `policy_price_deviation_exceeded` | policy `limit_order.max_deviation_bps` (limit order priced too far from the market) | price closer to the market, or owner `policy_update` |
+| `market_price_unavailable` | policy `limit_order`: no fresh USD price for either asset | send again once `GET /v1/tokens` prices both |
 | `policy_usage_unavailable` | earlier actions the API has no per-asset count for | wait until they leave the window, or the operator reconciles them |
 | `policy_schedule_denied` | policy `schedule` (owner's weekly hours) | submit again at `meta.available_at`, or owner changes `schedule` |
 | `policy_denied` | provider-enforced policy (assets, per-asset limits, rate, …) | owner `policy_update` |
@@ -54,7 +57,7 @@ A bigger USD budget never lifts a per-asset limit and a new grant never lifts a 
 budget or limit refusal of an execution that runs now is a plain refusal: no operation, no `FAILED` status, no
 charge. A `FAILED` row is recorded only when a request loses a concurrent race, or a timelocked one is released over budget or a limit.
 
-`dry: true` swap quotes and withdrawal previews are never refused by the account's rules (action,
+`dry: true` swap quotes, limit-order previews and withdrawal previews are never refused by the account's rules (action,
 destination, assets, schedule, USD budget, per-asset limits, `max_actions_per_hour`) or by the
 balance (`insufficient_balance`). Each one the live
 request would fail comes back in
@@ -69,9 +72,9 @@ quote: it is refused with `wallet_frozen`, as an archived or deleted one is with
 
 | Policy field | Enforced by | Changing only these needs |
 |---|---|---|
-| `destinations`, `budget`, `timelock_ms`, `schedule` | the API, before dispatch |
-| `limits` over a window, `max_actions_per_hour` | **both**: the API counts them at dispatch, the provider checks them again | one **on-chain** signature, as below | one **off-chain** signature (`nep413`/`eip712`/`webauthn`), no transaction |
-| `frozen`, `actions`, `confidential`, `owner_approval`, `assets`, `limits`, `max_actions_per_hour` | the wallet provider, on chain | one **on-chain** signature (`nep366` for NEAR owners; EVM/passkey sign `eip712`/`webauthn` and the API sponsors the call) |
+| `destinations`, `budget`, `timelock_ms`, `schedule`, `limit_order` (its `max_deviation_bps`) | the API, before dispatch | one **off-chain** signature (`nep413`/`eip712`/`webauthn`), no transaction |
+| `limits` over a window, `max_actions_per_hour` | **both**: the API counts them at dispatch, the provider checks them again | one **on-chain** signature, as below |
+| `frozen`, `actions` (adding or removing `limit_order` too), `confidential`, `owner_approval`, `assets`, `limits`, `max_actions_per_hour` | the wallet provider, on chain | one **on-chain** signature (`nep366` for NEAR owners; EVM/passkey sign `eip712`/`webauthn` and the API sponsors the call) |
 
 The API picks which, based on what changed; you just sign whatever `intent.standard` says.
 A policy is in force only when `GET …/policy` shows `status: "APPLIED"` and
@@ -81,7 +84,7 @@ A policy is in force only when `GET …/policy` shows `status: "APPLIED"` and
 
 | | Owner intents | Executions |
 |---|---|---|
-| Endpoints | `POST /v1/generate-intent` → wallet signs → `POST /v1/submit-intent` | `POST /v1/agents/{id}/swap|withdraw|transfer|shield|unshield|deposit` |
+| Endpoints | `POST /v1/generate-intent` → wallet signs → `POST /v1/submit-intent` | `POST /v1/agents/{id}/<action>` (swap, limit-orders, withdraw, transfer, shield, unshield, deposit) |
 | Authorized by | owner's signature on that exact payload | `X-Grant-Token` + the policy (deposit: API key only) |
 | Ids | `intent_…` | `op_…` |
 | Retry safety | resubmitting the same signature is idempotent | `Idempotency-Key` |
@@ -92,12 +95,15 @@ Both return a `correlation_id`; `GET /v1/status?correlation_id=` reads either.
 
 1. **Authorize** — grant live, not frozen, action/asset/limits/destination/budget allowed, and
    the `schedule` open at the moment it would run (now + `timelock_ms`).
-   Refusal = error response, nothing recorded.
+   Refusal = error response, nothing recorded. A limit order's price is also judged against the
+   market here.
 2. **Wait** — `timelock_ms > 0` → `QUEUED` until `execute_after` (owner may `execution_cancel`).
    `owner_approval` → `PENDING_APPROVAL` until the owner's `approval_vote`. An `approve`
    re-runs step 1 (grant live, not frozen, destination allowed; not the schedule) before the
    release and refuses the vote when it fails; a `reject` releases the budget charge. A release
-   outside the `schedule` fails the operation; nothing is sent.
+   outside the `schedule` fails the operation; nothing is sent. A limit order's price is judged
+   again at each release, a timelock's or an owner approval's. If the market price is briefly
+   unavailable when a timelocked order is released, the API retries it later instead of failing it.
 3. **Dispatch commit** — the `schedule` is checked once more, then `dispatch_committed_at` is
    set and the request goes to the provider.
    From here, revoking the grant/key or freezing does **not** stop this operation.
@@ -137,6 +143,8 @@ with `approval_vote`; EVM and passkey votes are confirmed by the owner's `0s` wa
   NEAR Intents account (no bridge).
 - Swaps and withdrawals route through 1Click; `dry: true` returns its quote with `spend`, `fee` and
   `warnings`, which lists any rule or check the live request would fail.
+- A **limit order** rests on the order book instead of filling at once; it is funded in full when
+  placed and is covered in [limit-orders.md](limit-orders.md).
 - Each USD cap resets in full at the end of its period, counted from when the owner turned it on;
   moving funds to your own account on another chain or venue (your Hyperliquid or Polymarket
   address) counts like any withdrawal, and a deposit back does not credit it.

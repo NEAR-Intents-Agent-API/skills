@@ -183,7 +183,13 @@ with that `correlation_id` before `execute_after`.
 charge (`FAILED`, `details.never_executed`). `approve` re-runs the admission checks first: a
 revoked or expired grant, a frozen or changed policy, or a destination no longer allowed refuses
 the vote (`authorization_stale`, `wallet_frozen`, `policy_destination_denied`), nothing is
-sent, and the request stays held for a `reject`. `approval_not_recorded` means the API has not
+sent, and the request stays held for a `reject` while the refusal can still clear (a frozen
+account). A refusal that can never clear ends it: once the policy, owner or lifecycle moved on or
+the grant was revoked or expired, it fails `authorization_stale`; once the approval's
+`expires_at` passes, it fails `expired`. Either way it settles `FAILED` with
+`details.never_executed`, the charge is released, it leaves `GET …/approvals`, and a later
+`approve` is refused (`authorization_stale` or `approval_closed`): don't retry the vote, tell the
+user and start a new request if they still want it. `approval_not_recorded` means the API has not
 yet recorded the request under its approval (its dispatch reply was lost): send the same vote
 again a few minutes later.
 

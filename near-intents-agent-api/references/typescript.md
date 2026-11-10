@@ -90,7 +90,7 @@ const deposit = await api.deposit(agentId, { origin_asset: usdcOnBase }, { idemp
 
 Also: `withdraw`, `transfer`, `shield`, `unshield`, `recover(agentId, { correlation_id, request }, { idempotencyKey })`.
 
-### Limit orders (SDK 0.8.1)
+### Limit orders (SDK 0.8.2)
 
 ```ts
 const order = { base_asset: "nep141:wrap.near", quote_asset: usdt, side: "sell" as const,
@@ -137,15 +137,18 @@ const sent = await agent.nativeNearTransfer(agentId, { to: "bob.near", amount: "
 
 Also `nativeNearCall`, `nativeEvmSignMessage`, `nativeEvmSignTransaction`,
 `nativeSolanaSignMessage`, `nativeSolanaSignTransaction`. SDK 0.7.4 adds
-`nativeEvmSignIntent` / `nativeSolanaSignIntent(agentId, { payload })` → `IntentSignature`
+`nativeEvmSignIntent` / `nativeSolanaSignIntent(agentId, { payload, one_click_quotes? })` → `IntentSignature`
 (`signed_data` to publish as is), `nativeSolanaSignIn(agentId, SolanaSignInRequest)` →
 `SolanaSignIn` (adds `signed_message`) and `nativeSolanaSignTransfer(agentId, { unsigned_tx, recipient })`
 → `NativeSignature`; policy types `SignIntentRules`, `EvmSignIntentRequest`,
-`SolanaSignIntentRequest`, `SolanaSignInRequest`, `SolanaSignTransferRequest`:
+`SolanaSignIntentRequest`, `SolanaSignInRequest`, `SolanaSignTransferRequest`; SDK 0.8.2 adds
+`one_click_quotes` and the type `OneClickQuote` (1Click's quote answer, sent unchanged):
 
 ```ts
 const payload = JSON.stringify({ signer_id, verifying_contract: "intents.near", deadline, nonce, intents }); // once, unchanged
 const { signed_data } = await agent.nativeEvmSignIntent(agentId, { payload });   // publish signed_data as is
+// a payload that pays a 1Click deposit address: also the live quote (dry: false), whole and unchanged
+// await agent.nativeEvmSignIntent(agentId, { payload, one_click_quotes: [quote] });
 ```
 
 Rules, 1Click deposit checks, refusals and the freeze caveat: [sign-intent.md](sign-intent.md).
@@ -196,7 +199,7 @@ try {
 } catch (error) {
   if (error instanceof AgentApiError) {
     switch (error.code) {
-      case "policy_destination_denied": /* ask owner to allow the address; for sign-intent read error.detail first (unlisted receiver vs a quote that failed the 1Click check) */ break;
+      case "policy_destination_denied": /* ask owner to allow the address; for sign-intent read error.detail first (unlisted receiver vs a missing or failed 1Click quote) */ break;
       case "spend_budget_exceeded":     /* show remaining budget (a dry quote or preview warns with this code); nothing was recorded */ break;
       case "insufficient_balance":      /* fund, or send at most error.availableAmount (atomic units) */ break;
       case "policy_price_deviation_exceeded": /* limit order: price closer to the market, or owner raises limit_order.max_deviation_bps */ break;

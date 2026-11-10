@@ -45,7 +45,7 @@ dedicated low-value owner account.
 | `07:refusals` | `07-native-accounts/04-refusals.ts` | every native refusal, incl. `intents.near`/`intents.far` |
 | `07:disable-native` | `07-native-accounts/05-disable-native.ts` | remove one service or omit `native` entirely |
 | `07:enable-sign-intent` | `07-native-accounts/06-enable-sign-intent.ts` | owner sets `native.evm.sign_intent` (1Click deposits, optional Base withdrawal) |
-| `07:sign-intent-deposit` | `07-native-accounts/07-sign-intent-deposit.ts` | 1Click quote → `generate-intent` → `nativeEvmSignIntent` → `submit-intent` (dry by default, `AGENT_EXECUTE=true` to sign) |
+| `07:sign-intent-deposit` | `07-native-accounts/07-sign-intent-deposit.ts` | live 1Click quote → `generate-intent` → `nativeEvmSignIntent` with `one_click_quotes` → `submit-intent` (dry by default, `AGENT_EXECUTE=true` to sign) |
 | `07:enable-solana` | `07-native-accounts/08-enable-solana.ts` | owner sets `solana.sign_in` and `solana.sign_transfer` |
 | `07:solana` | `07-native-accounts/09-solana-sign-in-and-transfer.ts` | Sign-In-With-Solana, then one SOL transfer signed, not broadcast |
 | `08:error-taxonomy` | `08-errors-and-recovery/01-error-taxonomy.ts` | real error documents |

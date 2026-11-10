@@ -34,9 +34,9 @@ Native = {                                                // when present, every
 
 SignIntentRules = {                                       // present = on; see sign-intent.md
   receivers: string[],                                    // 0–256 NEAR Intents accounts a signed transfer may pay
-  one_click_deposits: boolean,                            // also 1Click deposit addresses that pay the key or a receiver and refund the key
+  one_click_deposits: boolean,                            // also 1Click deposit addresses that pay the key or a receiver and refund the key (their signed quotes go in the request)
   withdrawals?: { chain: string, address: string }[],     // also 1Click deposits paying out to these addresses on other chains (canonical spelling as in destinations, no memo)
-  max_slippage_bps?: number,                              // 0–300, default 100; slippage plus 1Click's own fee
+  max_slippage_bps?: number,                              // 0–300, default 100; value lost at the quote's minAmountOut, fees and slippage
 }
 
 EvmTypedDataDomain = {                                    // ≥1 domain field, 0–64 entries unique by domain

@@ -18,8 +18,8 @@ These are the Agent API's orders on the agent's own balance. They are not 1Click
 | `POST /v1/agents/{agent_id}/limit-orders/{order_id}/cancel` | key, grant | no `Idempotency-Key`; unfilled part refunded |
 | `POST /v1/agents/{agent_id}/limit-orders/cancel-all` | key, grant | no key; at most 50 orders per call → `{ known, cancelled, failed, remaining, complete }` |
 
-SDK 0.8.1: `placeLimitOrder`, `listLimitOrders`, `getLimitOrder`, `cancelLimitOrder`,
-`cancelAllLimitOrders` ([typescript.md](typescript.md#limit-orders-sdk-081)). Python asset:
+SDK 0.8.2: `placeLimitOrder`, `listLimitOrders`, `getLimitOrder`, `cancelLimitOrder`,
+`cancelAllLimitOrders` ([typescript.md](typescript.md#limit-orders-sdk-082)). Python asset:
 `quote_limit_order`, `place_limit_order`, `list_limit_orders`, `get_limit_order`, `cancel_limit_order`,
 `cancel_all_limit_orders`. Rust asset: the same names, with `execute(id, "limit-orders", …)` placing.
 

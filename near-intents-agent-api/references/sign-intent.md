@@ -9,8 +9,8 @@ use the money routes.
 
 | Route (`POST /v1/agents/{agent_id}/native/…`) | Switch | SDK | Body |
 |---|---|---|---|
-| `evm/sign-intent` | `evm.sign_intent` | `nativeEvmSignIntent` | `{ payload }` |
-| `solana/sign-intent` | `solana.sign_intent` | `nativeSolanaSignIntent` | `{ payload }` |
+| `evm/sign-intent` | `evm.sign_intent` | `nativeEvmSignIntent` | `{ payload, one_click_quotes? }` |
+| `solana/sign-intent` | `solana.sign_intent` | `nativeSolanaSignIntent` | `{ payload, one_click_quotes? }` |
 | `solana/sign-in` | `solana.sign_in` lists the domain | `nativeSolanaSignIn` | `{ domain, nonce, issued_at, expiration_time, statement?, uri?, version?, chain_id? }` |
 | `solana/sign-transfer` | `solana.sign_transfer` | `nativeSolanaSignTransfer` | `{ unsigned_tx, recipient }` |
 
@@ -33,6 +33,8 @@ const payload = JSON.stringify({
   intents: [{ intent: "transfer", receiver_id: "treasury.near", tokens: { [assetId]: "1000000" } }],
 });
 const { signed_data, signature, account_id } = await agent.nativeEvmSignIntent(agentId, { payload });
+// paying a 1Click deposit address: also pass the live quote, unchanged
+// await agent.nativeEvmSignIntent(agentId, { payload, one_click_quotes: [quote] });
 ```
 
 - `intents` holds only `transfer` intents (`receiver_id`, `tokens` as `{ token_id: atomic amount }`,
@@ -43,8 +45,9 @@ const { signed_data, signature, account_id } = await agent.nativeEvmSignIntent(a
 - `deadline`: at most **300 seconds** ahead and still in the future. Whoever holds a signed payload
   can publish it until then, so sign one that is due soon. The one exception is a payload that pays
   only 1Click deposits (below): up to **96 hours**, because 1Click writes its own quote deadline.
-- For a 1Click deposit, take the payload from 1Click's `generate-intent` for the quote rather than
-  hand-building it, then pass its text through untouched.
+- For a 1Click deposit, request a **live** quote (`POST /v0/quote` with `dry: false`), take the
+  payload from 1Click's `generate-intent` for it rather than hand-building it, pass its text through
+  untouched, and send the quote as `one_click_quotes` (below).
 
 The answer is the usual `NativeSignature` plus `signed_data`, ready to publish **as is** to
 `intents.near` (`execute_intents`), to 1Click, or to a solver relay: `{ standard: "erc191", payload,
@@ -52,6 +55,9 @@ signature: "secp256k1:…" }` for the EVM key, `{ standard: "raw_ed25519", paylo
 signature }` for Solana. The API verifies the provider's signature against the agent's own key
 before answering; a signature that fails is discarded (`502 provider_signature_invalid`, no value
 returned, safe to ask again). The signature is returned only to this call.
+
+sign-intent takes no `Idempotency-Key`: a retry is judged again from scratch. A refused payload never
+reaches the wallet provider and is never signed.
 
 ## Who may be paid
 
@@ -62,38 +68,50 @@ exists, and a listed receiver is paid whatever the payload says, from that key's
 1. **`receivers`**: every `receiver_id` must be in `sign_intent.receivers`. Otherwise
    `403 policy_destination_denied` before the provider is called.
 2. **1Click deposits** (`one_click_deposits: true`, or a non-empty `withdrawals`): a receiver that is
-   not listed may be a 1Click deposit address, at most 2 per payload. The API reads 1Click's status
-   for that address (any partner's quote) and signs only when all of this holds:
-   - the quote is `PENDING_DEPOSIT`;
+   not listed may be a 1Click deposit address, at most 2 per payload. Send 1Click's `POST /v0/quote`
+   answer for each one in `one_click_quotes` (up to 2, one per deposit address the payload pays
+   outside `receivers`), **unchanged**: the whole JSON object (`quote`, `quoteRequest`, `signature`,
+   `timestamp`, …), from any partner's key. The API checks 1Click's ed25519 signature offline against
+   1Click's quote key (`ed25519:reYaWhvwu8Jzo3WUM3zhn6VrhuMEF4eADL17qtRVifc`, the check of the 1Click
+   SDK's `verifyQuoteSignature`) and never calls 1Click's `/v0/status`. This is what makes
+   confidential (`intents.far`) deposits work; public (`intents.near`) deposits need the quote too.
+   It signs only when all of this holds:
+   - the quote is signed by 1Click, untampered, and live (`dry: false`);
    - it pays out to the payload's `signer_id` or a listed receiver (inside Intents, on the contract's
      account type: `INTENTS`, `CONFIDENTIAL_INTENTS` for `intents.far`), or, with `withdrawals`, to a
      listed `{ chain, address }` on another chain. The chain is the one 1Click's token listing gives
      the quote's destination asset, never the quote request's; the address matches in canonical
      spelling; a listing that cannot be read is `503 provider_unavailable`;
-   - it refunds to the `signer_id`, deposits into the contract's account type, and has no rebates,
-     custom recipient message or virtual-chain recipients;
-   - its app fees are only 1Click's own fee (to 1Click's fee account), and slippage tolerance plus
-     that fee is at most `max_slippage_bps` (0 to 300, default 100); any other fee is refused;
+   - it refunds to the `signer_id`, `refundType` and `depositType` are the contract's account type,
+     and it has no custom recipient message or virtual-chain fields;
+   - the value lost at the quote's `minAmountOut` is at most `max_slippage_bps` (0 to 300, default
+     100), by 1Click's signed USD amounts (`amountOutUsd` scaled to `minAmountOut` against
+     `amountInUsd`). Every fee counts, 1Click's own (about 20 bps) and any partner app fee, as does
+     slippage; `appFees` and `slippageTolerance` are not read. Request a `slippageTolerance` clearly
+     below the cap (50 under the default 100): a quote whose tolerance equals the cap is refused,
+     because fees and spread push it over, and a pair that buys NEAR can measure about 180 bps at
+     tolerance 100;
    - the payload pays it with one plain transfer (no `msg`, no `min_gas`) of **exactly** the quote's
      `amountIn` of its origin asset (on `intents.far`, the token `imt:51e8f94d77b5e90dc9852ca6113771e11e8382ce69473a75e313e41665de7cbe:<originAsset>`, as 1Click's `generate-intent` writes it),
      due no later than the quote's deadline.
 
    `withdrawals` works without `one_click_deposits` and is how an agent withdraws or funds a venue
-   (Hyperliquid, Polygon, Solana, Base, …) from this key. The loss bound is the quote's slippage and
-   1Click's fee, not an amount rule.
+   (Hyperliquid, Polygon, Solana, Base, …) from this key. The loss bound is `max_slippage_bps` on the
+   quote's fees and slippage, not an amount rule.
 
 ## Refusals
 
 | Code | Status | Meaning and move |
 |---|---|---|
 | `native_method_denied` | 403 | `sign_intent` is off for this key → owner `policy_update` |
-| `policy_destination_denied` | 403 | a receiver is not allowed, or the quote check failed. **Read `detail`**: an unlisted receiver or withdrawal address → owner adds it; a quote that is not `PENDING_DEPOSIT`, a wrong amount, a refund elsewhere, an extra fee or too much slippage → get a fresh quote and rebuild, nothing for the owner to change (unless the slippage cap is too low for the route) |
+| `policy_destination_denied` | 403 | a receiver is not allowed, or the quote check failed. **Read `detail`**: an unlisted receiver or withdrawal address → owner adds it; a deposit address paid without its quote, an unsigned, tampered or dry quote, a wrong amount, a refund elsewhere or too much loss → get a fresh live quote and rebuild, nothing for the owner to change (unless the slippage cap is too low for the route) |
+| `validation_failed` | 400 | a quote in `one_click_quotes` is for an address the payload does not pay, or repeats one; `source.pointer` is `/one_click_quotes/{i}/quote/depositAddress` → send one quote per paid deposit address |
 | `intents_type_forbidden` | 403 | an intent other than `transfer` (`source.pointer`, e.g. `/payload/intents/0/intent`, names it) → remove it |
 | `intents_contract_forbidden` | 403 | `verifying_contract` is not `intents.near`/`intents.far`, or a receiver is one of them |
 | `intents_signer_mismatch` | 403 | `signer_id` is not this key's Intents account → use the lowercase address from the wallet |
 | `intents_deadline_invalid` | 400 | not RFC 3339 UTC with `Z`, already past, or beyond 300 s (96 h for deposit-only payloads) → new deadline |
 | `intents_payload_invalid` | 400 | not canonical JSON, unknown or repeated field, bad nonce or amount (`source.pointer`) → rebuild and stringify once |
-| `provider_unavailable`, `provider_rate_limited` | 503, 429 | 1Click could not be read for a deposit address → retry later, same request ([errors.md](errors.md)) |
+| `provider_unavailable`, `provider_rate_limited` | 503, 429 | 1Click's token listing could not be read for a withdrawal → retry later, same request ([errors.md](errors.md)) |
 | `provider_signature_invalid` | 502 | the returned signature did not verify and was discarded → try again; if it repeats, report the `request_id` |
 | `wallet_frozen` | 409 | account frozen → owner `agent_unfreeze` |
 | `intents_payload_use_sign_intent` | 403 | you sent an Intents payload to `evm/sign-message` or `solana/sign-message` → use `sign-intent` |
@@ -105,7 +123,8 @@ exists, and a listed receiver is paid whatever the payload says, from that key's
   accounts the owner controls or trusts fully.
 - `one_click_deposits` and `withdrawals` let it start swaps and withdrawals through 1Click that pay
   the key, a listed receiver or a listed address. In `withdrawals`, list only the owner's own
-  addresses. Slippage plus 1Click's fee is the only bound.
+  addresses. `max_slippage_bps` on the quote's fees and slippage is the only bound. A deposit that
+  1Click has since closed is not detected; a late payment refunds to the signer.
 - **Freeze caveat, say it plainly:** a freeze refuses new payloads but cannot recall one that was
   already signed. A payload signed before the freeze stays publishable by anyone who holds it until
   its own deadline: up to 5 minutes, or up to 96 hours for a deposit payload. Where you describe

@@ -90,7 +90,7 @@ const deposit = await api.deposit(agentId, { origin_asset: usdcOnBase }, { idemp
 
 Also: `withdraw`, `transfer`, `shield`, `unshield`, `recover(agentId, { correlation_id, request }, { idempotencyKey })`.
 
-### Limit orders (SDK 0.8.2)
+### Limit orders (SDK 0.8.1)
 
 ```ts
 const order = { base_asset: "nep141:wrap.near", quote_asset: usdt, side: "sell" as const,

@@ -109,11 +109,11 @@ Details: [owner-intents.md](owner-intents.md), signing: [signing.md](signing.md)
 | `near/call` → 202, idem | `near.call` lists `receiver_id` | `receiver_id`, `method_name`, `args?` \| `args_base64?`, `gas?`, `deposit?` | `StatusResponse` |
 | `evm/sign-typed-data` → 200 | domain (and `primaryType`, if the entry lists `primary_types`) in `evm.sign_typed_data` | `chain`, `typed_data` (EIP-712 v4; `message` ≤ 65536 bytes as canonical JSON) | `NativeSignature` |
 | `evm/sign-message` → 200 | `evm.sign_message` | `chain`, `message`, `encoding?` | `NativeSignature` |
-| `evm/sign-intent` → 200 | `evm.sign_intent` | `payload` (string: exact canonical JSON text of a NEAR Intents payload, `transfer` intents only) | `NativeSignature` + `signed_data` |
+| `evm/sign-intent` → 200 | `evm.sign_intent` | `payload` (string: exact canonical JSON text of a NEAR Intents payload, `transfer` intents only), `one_click_quotes?` (up to 2 of 1Click's `POST /v0/quote` answers, unchanged, one per 1Click deposit address the payload pays) | `NativeSignature` + `signed_data` |
 | `evm/sign-transaction` → 200 | `evm.sign_transaction` | `chain`, `unsigned_tx` (`0x` serialized unsigned EIP-2718 or EIP-155 transaction for `chain`) | `NativeSignature` |
 | `solana/sign-in` → 200 | `solana.sign_in` lists `domain` | `domain`, `nonce`, `issued_at`, `expiration_time`, `statement?`, `uri?`, `version?`, `chain_id?` | `NativeSignature` + `signed_message` |
 | `solana/sign-message` → 200 | `solana.sign_message` | `message`, `encoding?` (`utf8`/`hex`/`base64`) | `NativeSignature` |
-| `solana/sign-intent` → 200 | `solana.sign_intent` | `payload`, as `evm/sign-intent` | `NativeSignature` + `signed_data` |
+| `solana/sign-intent` → 200 | `solana.sign_intent` | `payload`, `one_click_quotes?`, as `evm/sign-intent` | `NativeSignature` + `signed_data` |
 | `solana/sign-transfer` → 200 | `solana.sign_transfer`; `destinations` allows `recipient` | `unsigned_tx` (base64 legacy or v0 message making one SOL/SPL transfer), `recipient` | `NativeSignature` |
 | `solana/sign-transaction` → 200 | `solana.sign_transaction` | `unsigned_tx` (base64 legacy or v0 transaction message) | `NativeSignature` |
 

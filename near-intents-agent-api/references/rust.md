@@ -26,7 +26,7 @@ let network = api.get_network().await?;
 let tokens = api.get_tokens().await?;
 let agent = api.get_agent(&agent_id).await?;
 let policy = api.get_policy(&agent_id).await?;
-let balances = api.get_balances(&agent_id, "public").await?;
+let balances = api.get_balances(&agent_id, "confidential").await?;   // "public" reads the legacy balance
 ```
 
 Bodies and responses are `serde_json::Value`. For anything without a helper use
@@ -75,7 +75,7 @@ let op = agent.execute(&agent_id, "swap", &json!({
 let final_status = api.wait_for_status(op["correlation_id"].as_str().unwrap(), std::time::Duration::from_secs(300)).await?;
 ```
 
-`execute` covers `swap`, `limit-orders` (a live order), `withdraw`, `transfer`, `shield`, `unshield`;
+`execute` covers `swap`, `limit-orders` (a live order), `withdraw`, `transfer`, `shield` (and `unshield`, which the API always refuses);
 `deposit` has its own method (no grant). Limit orders also have `quote_limit_order` (dry, no
 grant), `list_limit_orders`, `get_limit_order`, `cancel_limit_order` and `cancel_all_limit_orders`
 (grant, no key; repeat until `complete`); see [limit-orders.md](limit-orders.md).

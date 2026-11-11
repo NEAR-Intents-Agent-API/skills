@@ -6,7 +6,7 @@ Use a swap when the agent wants to trade now at the current quote; use a limit o
 specific price and can wait. Fills and refunds return to the balance that funded the order.
 
 These are the Agent API's orders on the agent's own balance. They are not 1Click's separate
-"limit orders" product for confidential 1Click swaps, and they default to the **public** balance.
+"limit orders" product for confidential 1Click swaps. They run on the agent's confidential balance.
 
 ## Endpoints
 
@@ -29,7 +29,7 @@ SDK 0.8.1: `placeLimitOrder`, `listLimitOrders`, `getLimitOrder`, `cancelLimitOr
 POST /v1/agents/{agent_id}/limit-orders
 { "base_asset": "nep141:wrap.near", "quote_asset": "<usdt asset_id>", "side": "sell",
   "quantity": "1000000000000000000000000", "price": "5.2",
-  "deadline": "2026-11-12T10:00:00Z", "confidential": false, "dry": true }
+  "deadline": "2026-11-12T10:00:00Z", "dry": true }
 ```
 
 - `base_asset` / `quote_asset`: `asset_id` values from `GET /v1/tokens`, different from each other
@@ -42,13 +42,16 @@ POST /v1/agents/{agent_id}/limit-orders
   sign or leading zeros, at most 40 characters). Never a float.
 - `deadline`: optional RFC 3339, in the future and at most 7 days ahead; omitted means 7 days.
   A later `deadline` is `validation_failed` at `/deadline`.
-- `confidential: true` funds the order from the confidential balance and pays back there; it never
-  falls back to the public balance. The policy needs `confidential` as well as `limit_order`.
+- The order is funded from the confidential balance and pays back there (the default; never a
+  fallback to the public balance). `confidential: false` is refused with `public_balance_exit_only`
+  (400, not retryable, live and `dry`); a resting public order placed earlier still fills, reads and
+  cancels. The policy needs `confidential: true` as well as `limit_order`.
+- `note`: optional, 1 to 500 characters on one line, the agent's own words for why; owner-only, see
+  [executions.md](executions.md#reference-note-and-receipts).
 
 ## The agent's procedure
 
-1. **Check the rules.** `GET …/policy` lists `limit_order` in `actions` (and `confidential` for a
-   confidential order); note `limit_order.max_deviation_bps` (default 100) and the budget left.
+1. **Check the rules.** `GET …/policy` lists `limit_order` in `actions` and has `confidential: true`; note `limit_order.max_deviation_bps` (default 100) and the budget left.
 2. **Dry first.** `dry: true` needs only the API key (no grant, no key) and makes no provider call.
    It answers `200` with `spend` (USD value and budget left), `quote` (`spend_asset`, `spend_amount`,
    `receive_asset`, `min_amount_out`: the least a full fill delivers before 1Click's fee) and
@@ -61,7 +64,8 @@ POST /v1/agents/{agent_id}/limit-orders
    retries are safe; `UNCERTAIN` is polled, never resubmitted, and `recover` takes `type: "limit_order"`
    ([status-and-recovery.md](status-and-recovery.md)).
 4. **`SUCCESS` means resting, not filled.** The operation ends once the order is funded and on the
-   book; `details.order_id` names it. Never tell the user the trade happened.
+   book; `details.order_id` names it. Never tell the user the trade happened. Its receipt proves the
+   order was funded and placed, not filled.
 5. **Follow it.** `GET …/limit-orders/{order_id}` is live: `fill_status` (`awaiting_deposit`, `open`,
    `partially_filled`, `filled`, `canceled`, `expired`, …), `partial_fills`, `payouts`,
    `is_payout_status_final` (true once nothing more can be paid out or refunded) and `app_fees`.
@@ -117,7 +121,8 @@ POST /v1/agents/{agent_id}/limit-orders
 
 | Code | Layer | Do |
 |---|---|---|
-| `policy_action_denied` | policy | `limit_order` (or `confidential`) is not in `actions`: ask the owner |
+| `policy_action_denied` | policy | `limit_order` is not in `actions`, or the stored policy has `confidential` off: ask the owner |
+| `public_balance_exit_only` | request | `confidential: false` was sent: never retry it; omit `confidential` |
 | `policy_price_deviation_exceeded` | policy | re-price nearer the market (the detail names it), or the owner raises `limit_order.max_deviation_bps` |
 | `market_price_unavailable` | policy | an asset has no fresh price; no `retryable` flag, nothing recorded: try again later under a new key |
 | `amount_too_low` | request | below 0.1 USD (400) or the provider minimum (409): raise `quantity` (`meta.min_amount` for a sell) |

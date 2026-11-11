@@ -61,11 +61,12 @@ grant of that conversation.
 
 | Tool | API | Notes |
 |---|---|---|
-| `get_balances` | `GET …/balances` (public + confidential) | format with `decimals`; report `available`, not `balance`, as what can be spent |
+| `get_balances` | `GET …/balances` (confidential; `?source=public` for a legacy balance) | format with `decimals`; report `available`, not `balance`, as what can be spent |
 | `get_rules` | `GET …/policy` | summarize actions, destinations, budget remaining, timelock, schedule |
 | `list_tokens` | `GET /v1/tokens` | cache; resolve symbols → `asset_id` |
 | `quote_swap` / `quote_limit_order` / `quote_withdraw` | `dry: true` | always before executing; show `fee` and `warnings`; a rule or check code in `warnings` means the live call would be refused with it; a frozen, archived or deleted account gets no quote |
-| `swap` / `transfer` / `withdraw` | executions | server creates the idempotency key; require explicit user confirmation for amounts above a threshold |
+| `swap` / `transfer` / `withdraw` | executions | server creates the idempotency key; require explicit user confirmation for amounts above a threshold; never let the model send `confidential: false` (`public_balance_exit_only`); pass a `reference` for a payment tied to an order and a `note` saying why |
+| `get_receipt` | `GET …/operations/{id}/receipt` | after `SUCCESS`; hand `receipt` to a payee, never `details` (it holds `usd_value` and `note`) |
 | `place_limit_order` | `POST …/limit-orders` | dry-first behind a grant and the policy's `limit_order` action; server creates the key; the result is "resting", not "filled" |
 | `list_limit_orders` / `get_limit_order` | `GET …/limit-orders[/{id}]` | read-only; `get` is live (`fill_status`, `partial_fills`) |
 | `cancel_limit_order` / `cancel_all_limit_orders` | `POST …/limit-orders/{id}/cancel`, `…/cancel-all` | safe to expose: they only return unfilled funds to the agent's own balance, need a grant and no policy allowance; repeat cancel-all until `complete` |

@@ -44,7 +44,7 @@ issue another. Never log it, never put it in an LLM prompt, URL or client bundle
 
 ## Use
 
-Send it as `X-Grant-Token` on swap, limit orders (place and cancel), withdraw, transfer, shield, unshield, recover (and
+Send it as `X-Grant-Token` on swap, limit orders (place and cancel), withdraw, transfer, shield, recover (and
 sign). One client per grant, so concurrent sessions never borrow each other's token:
 
 ```ts

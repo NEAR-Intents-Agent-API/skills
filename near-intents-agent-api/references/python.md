@@ -25,10 +25,10 @@ tokens = {t["asset_id"]: t for t in api.get_tokens()}
 ```
 
 Methods: `generate_intent`, `submit_intent`, `get_status(cid, wait_ms, refresh)`,
-`wait_for_status(cid, deadline_s)`, `list_agents`, `get_agent`, `get_balances(agent_id, source, asset)`,
+`wait_for_status(cid, deadline_s)`, `list_agents`, `get_agent`, `get_balances(agent_id, source="confidential", asset)`,
 `get_policy`, `list_grants`, `get_history`, `list_scheduled`, `list_approvals`,
 `get_containment`, `quote_swap`, `quote_withdraw`, `swap`, `withdraw`, `transfer`, `shield`,
-`unshield`, `deposit`, `recover`, the limit-order methods (`quote_limit_order`, `place_limit_order`,
+`unshield` (always refused), `deposit`, `recover`, the limit-order methods (`quote_limit_order`, `place_limit_order`,
 `list_limit_orders`, `get_limit_order`, `cancel_limit_order`, `cancel_all_limit_orders`), plus the generic `request(method, path, query=, body=, idempotency_key=, grant=)`
 for anything else. Responses are plain dicts with the API's snake_case fields.
 

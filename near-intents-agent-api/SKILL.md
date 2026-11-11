@@ -72,6 +72,12 @@ Follow these in every integration; most bugs and lost-fund incidents come from b
 14. **Show the owner the required risk notice.** Before the owner signs `agent_create`, show the
     Owner Terms, OutLayer's terms and the notice, and keep evidence of acceptance. Show the notice
     again before the owner funds the wallet. For `agent_create`, `preview.summary` ends with it.
+15. **The agent's account is its confidential balance.** Omit `confidential` (or send `true`) on swap,
+    limit order, transfer, withdraw and deposit; balances read confidential unless `source=public`.
+    `confidential: false` is refused with `public_balance_exit_only` (400, never retry) on swap,
+    limit order, transfer and deposit. Only `withdraw` accepts it, to empty a legacy public balance;
+    `shield` moves public funds into the confidential balance; `unshield` is always refused.
+    A new policy must set `confidential: true`.
 
 ## Quick start (5 minutes, any language)
 
@@ -102,8 +108,8 @@ owner signs ──► agent_create (policy) ──► grant_issue (token commitm
    the token encrypted.
 3. **Fund** — `POST /v1/agents/{agent_id}/deposit {origin_asset}` (API key + Idempotency-Key, no
    grant; `amount` optional) returns `details.deposit_address`, `min_amount`, `expires_at`,
-   optional `memo`, and `refund_to` (the agent's own balance).
-4. **Act** — `POST /v1/agents/{agent_id}/swap|limit-orders|transfer|withdraw|shield|unshield` with
+   optional `memo`, and `refund_to` (the agent's own balance). It credits the confidential balance.
+4. **Act** — `POST /v1/agents/{agent_id}/swap|limit-orders|transfer|withdraw|shield` with
    `X-API-Key`, `X-Grant-Token`, `Idempotency-Key`. Quote first with `dry: true`: a swap or limit-order quote needs only `X-API-Key`; a withdrawal preview needs
    the grant and a key, like the withdrawal (the API sets no preview cap; the provider's 1,000 custody
    operations per rolling 24 h apply). The account's rules do not refuse a quote: it
@@ -115,6 +121,9 @@ owner signs ──► agent_create (policy) ──► grant_issue (token commitm
    code the live request gets (`agent_archived`, `agent_deleted`, `wallet_frozen`).
 5. **Observe** — `GET /v1/status?correlation_id=…&wait_ms=30000` until it stops moving. A limit order
    that reached `SUCCESS` is resting, not filled: follow it with `GET /v1/agents/{agent_id}/limit-orders/{order_id}`.
+   A completed transfer, withdrawal, swap, limit order or deposit also has a receipt:
+   `GET /v1/agents/{agent_id}/operations/{correlation_id}/receipt`, or `GET …/receipts` for the list
+   ([references/executions.md](references/executions.md#reference-note-and-receipts)).
 
 Every owner action (policy edits, freeze, grant revoke, approval votes, cancel, delete) is the
 same generate → sign → submit → status loop.
@@ -141,9 +150,9 @@ The Python and Rust signers are verified byte-for-byte against near-api-js and v
 | Sign `nep413` / `nep366` / `eip712` / `webauthn` correctly | [references/signing.md](references/signing.md) |
 | Write or edit a policy (actions, limits, destinations, USD budget, limit-order price bound, timelock, schedule, approval) | [references/policy.md](references/policy.md) |
 | Issue, use, store, revoke grants | [references/grants.md](references/grants.md) |
-| Swap, transfer, withdraw, deposit, shield, quotes, chains | [references/executions.md](references/executions.md) |
+| Swap, transfer, withdraw, deposit, shield, quotes, chains, `reference` / `note`, receipts | [references/executions.md](references/executions.md) |
 | Place, follow and cancel limit orders (resting orders, price bound, containment, delete guard) | [references/limit-orders.md](references/limit-orders.md) |
-| Statuses, polling, idempotency, `UNCERTAIN`, `/recover`, operation proofs | [references/status-and-recovery.md](references/status-and-recovery.md) |
+| Statuses, polling, idempotency, `UNCERTAIN`, `/recover`, operation proofs, verifying receipts | [references/status-and-recovery.md](references/status-and-recovery.md) |
 | Sign NEAR Intents payloads, Solana logins or transfers with the agent's EVM/Solana key (`sign-intent`, `sign-in`, `sign-transfer`) | [references/sign-intent.md](references/sign-intent.md) |
 | Handle an error code | [references/errors.md](references/errors.md) |
 | Design the integration (data model, AI tools, key ownership models, security) | [references/architecture.md](references/architecture.md) |

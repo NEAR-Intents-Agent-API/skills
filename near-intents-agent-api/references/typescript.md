@@ -24,7 +24,7 @@ await api.getPartnerQuota();
 const tokens = await api.getTokens();          // TokenView[]
 ```
 
-Options: `baseUrl`, `timeoutMs` (default 150 s for settlement writes: live swap, limit order, withdraw, transfer, shield, unshield; 65 s otherwise),
+Options: `baseUrl`, `timeoutMs` (default 150 s for settlement writes: live swap, limit order, withdraw, transfer, shield; 65 s otherwise),
 `maxResponseBytes`, `fetch`, `grantToken`.
 
 ## Owner intent loop
@@ -88,7 +88,15 @@ const deposit = await api.deposit(agentId, { origin_asset: usdcOnBase }, { idemp
 // deposit.details: deposit_address, memo?, min_amount, expires_at, refund_to, deposit_seen_at? (SDK 0.7.3)
 ```
 
-Also: `withdraw`, `transfer`, `shield`, `unshield`, `recover(agentId, { correlation_id, request }, { idempotencyKey })`.
+Also: `withdraw`, `transfer`, `shield`, `recover(agentId, { correlation_id, request }, { idempotencyKey })`.
+`unshield` is deprecated: the API refuses every request with `public_balance_exit_only`.
+
+`confidential` defaults to `true`. `swap`, `placeLimitOrder`, `transfer` and `deposit` throw
+`AgentApiError` with `code: "public_balance_exit_only"` (400, `layer: "request"`, not retryable) for
+`confidential: false`; do not retry. Only `withdraw(…, { confidential: false })` still pays from the
+legacy public balance, and `shield` moves public funds into the confidential balance. Pass
+`reference` (transfer, withdraw) to tie a payment to an order and `note` (any execution) to say why;
+the note is owner-only.
 
 ### Limit orders (SDK 0.8.1)
 
@@ -111,11 +119,11 @@ Types: `LimitOrderRequest`, `LimitOrderView`, `LimitOrderPage`, `CancelLimitOrde
 
 ## Reads
 
-`listAgents({ external_user_id, cursor })`, `getAgent`, `getWallet`, `getBalances(id, { source, asset })`,
+`listAgents({ external_user_id, cursor })`, `getAgent`, `getWallet`, `getBalances(id, { source, asset })` (confidential unless `source: "public"`),
 `getPolicy`, `getPolicyHistory`, `listGrants`, `listScheduledExecutions`, `getContainment`,
 `listApprovals`, `getApproval`, `listLimitOrders`, `getLimitOrder`, `getAddress(id, "near")`, `listProviderRecords(id, kind)`,
 `getHistory(id, { cursor, limit, include_unpaid })`, `getStatus(cid, { waitMs, refresh })`,
-`getOperationProof(id, cid)`.
+`getOperationProof(id, cid)`, `getReceipt(id, cid)`, `listReceipts(id, { type, limit, cursor })`.
 
 ## Native accounts
 
@@ -190,6 +198,34 @@ next checkpoint. To tie the keys to attested code, check the notary's TDX birth 
 runs in a Google Cloud TDX confidential VM with keys from its own KMS. A deployment without a log
 answers `501 transparency_log_disabled`. The two-argument `verifyOperationProof(proof, origin)` of
 SDK 0.7.2 and earlier did not check for rollback; upgrade to 0.8.0.
+
+## Receipts
+
+```ts
+import { fetchWitnessCheckpoint, logTileReader, verifyPaymentReceipt } from "@near-intents-agent-api/sdk";
+
+const paid = await agent.transfer(agentId, {
+  asset: usdc, amount: "2500000", recipient: "shop.near",
+  reference: "order-42",                          // shared with the payee through the receipt
+  note: "Paying order 42, as the owner asked",    // owner-only; never in the receipt
+}, { idempotencyKey });
+// After getStatus reads SUCCESS:
+const item = await api.getReceipt(agentId, paid.correlation_id);   // { status, details, receipt }; receipt is null until PROVEN
+const page = await api.listReceipts(agentId, { type: "transfer", limit: 50 });  // keep paging while next_cursor is set
+
+// The payee verifies what it was handed, against a head it fetched and pinned itself:
+const payment = await verifyPaymentReceipt(item.receipt!, {
+  origin: ORIGIN, trusted: head, readTile: logTileReader("https://log.agentsonintents.com/"),
+  expect: { recipient: "shop.near", asset: usdc, amount: "2500000", reference: "order-42" },
+  // confidential omitted = a confidential payment (the default); `confidential: false` accepts one
+  // paid from the legacy public balance
+});
+```
+
+`verifyReceipt(receipt, { origin, trusted, readTile })` checks any receipt type and returns its typed
+`terms`. `ReceiptNotCoveredError` and `LogUnavailableError` are retryable; `NoteError` and
+`ProofError` mean reject. A withdrawal receipt proves the debit, not what arrived. See
+[status-and-recovery.md](status-and-recovery.md#receipts).
 
 ## Errors
 

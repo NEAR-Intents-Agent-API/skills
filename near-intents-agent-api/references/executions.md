@@ -6,13 +6,22 @@ All are `POST /v1/agents/{agent_id}/<action>` and return `202` with a `StatusRes
 
 | Action | Headers | Body | Policy needs |
 |---|---|---|---|
-| `swap` | key, grant, idem | `origin_asset`, `destination_asset`, `amount`, `min_amount_out?`, `confidential?`, `dry?` | `swap` (+`confidential`) |
-| `limit-orders` | key, grant, idem | `base_asset`, `quote_asset`, `side`, `quantity`, `price`, `deadline?`, `confidential?`, `dry?` | `limit_order` (+`confidential`) |
-| `withdraw` | key, grant, idem | `asset`, `amount`, `chain`, `recipient`, `memo?`, `confidential?`, `async?`, `dry?` | `withdraw`, destination allowed |
-| `transfer` | key, grant, idem | `asset`, `amount`, `recipient`, `confidential?` | `transfer`, destination allowed |
-| `shield` / `unshield` | key, grant, idem | `asset`, `amount` | `confidential: true` |
-| `deposit` | key, idem | `origin_asset`, `destination_asset?`, `amount?`, `confidential?` | nothing (always allowed) |
+| `swap` | key, grant, idem | `origin_asset`, `destination_asset`, `amount`, `min_amount_out?`, `confidential?`, `note?`, `dry?` | `swap`, `confidential: true` |
+| `limit-orders` | key, grant, idem | `base_asset`, `quote_asset`, `side`, `quantity`, `price`, `deadline?`, `confidential?`, `note?`, `dry?` | `limit_order`, `confidential: true` |
+| `withdraw` | key, grant, idem | `asset`, `amount`, `chain`, `recipient`, `memo?`, `reference?`, `confidential?`, `note?`, `async?`, `dry?` | `withdraw`, destination allowed |
+| `transfer` | key, grant, idem | `asset`, `amount`, `recipient`, `reference?`, `confidential?`, `note?` | `transfer`, destination allowed, `confidential: true` |
+| `shield` | key, grant, idem | `asset`, `amount` | `confidential: true` |
+| `unshield` | key | `asset`, `amount` | refused: every request is `public_balance_exit_only` |
+| `deposit` | key, idem | `origin_asset`, `destination_asset?`, `amount?`, `confidential?`, `note?` | `confidential: true` (no grant) |
 | `recover` | key, grant, original idem | `correlation_id`, `request: {type, …original body}` | re-authorized in full |
+
+**Confidential by default.** The agent's account is its confidential balance: omit `confidential`
+(or send `true`) and every action above uses it. `confidential: false` is refused with
+`public_balance_exit_only` (400, layer `request`, not retryable; live and `dry`, before any provider
+call) on `swap`, `limit-orders`, `transfer` and `deposit`. `withdraw` accepts it and pays from the
+legacy public balance: with `shield` the only way to empty it. `unshield` is refused for every
+request, so never offer it. Work already recorded on the public balance (held, in flight, resting
+limit orders) still settles, and a replay of its key returns its record.
 
 `amount` is atomic (integer string) and must be greater than zero for every action that moves funds
 (`validation_failed` otherwise). Asset ids come from `GET /v1/tokens`. A recipient that is not a valid
@@ -117,8 +126,8 @@ Then poll `GET /v1/status?correlation_id=op_…&wait_ms=30000` (see
 - route refunded: `REFUNDED` (`details.refund_tx_hash`); never filled: `FAILED` with `failure_code`
 
 The execution call holds the HTTP request open up to ~2 minutes while the provider answers; give
-the client a ~150 s timeout (the SDK gives a live `swap`, `placeLimitOrder`, `withdraw`, `transfer`, `shield` and
-`unshield` that budget). `withdraw` with `async: true` returns as soon as it is accepted.
+the client a ~150 s timeout (the SDK gives a live `swap`, `placeLimitOrder`, `withdraw`, `transfer` and `shield`
+that budget). `withdraw` with `async: true` returns as soon as it is accepted.
 
 ## Swap
 
@@ -139,7 +148,7 @@ the client a ~150 s timeout (the SDK gives a live `swap`, `placeLimitOrder`, `wi
 
 ## Limit order
 
-A resting order on the agent's public balance (`confidential: true` for the confidential one). `SUCCESS`
+A resting order on the agent's confidential balance (`confidential: false` is refused). `SUCCESS`
 means funded and resting, not filled: the order id is `details.order_id`. Placing, following and cancelling
 one is covered in [limit-orders.md](limit-orders.md).
 
@@ -147,6 +156,9 @@ one is covered in [limit-orders.md](limit-orders.md).
 
 - Leaves NEAR Intents to `recipient` on `chain`. Public and confidential withdrawals reach every
   `blockchain` value `GET /v1/tokens` lists (`near`, `eth`, `sol`, `btc`, `tron`, …).
+- Pays from the confidential balance. `confidential: false` pays from the legacy public balance,
+  the one place that flag is still accepted: use it to empty leftover public funds (or `shield`
+  them). The policy's `withdraw` action and destination rule apply either way.
 - `memo` for chains/exchanges that need one (the policy's `only` rule matches memo exactly).
 - NEAR (`nep141:wrap.near`, or `near`) withdrawn to chain `near` always arrives as **native NEAR**,
   from the public or the confidential balance, as from a NEAR wallet or 1Click: no `wrap.near`
@@ -173,22 +185,23 @@ one is covered in [limit-orders.md](limit-orders.md).
   funds sent to an unregistered name cannot be recovered. Implicit ids (64 hex, or `0x` + 40 hex)
   need no account. If NEAR RPC cannot answer, the transfer is refused with retryable
   `503 near_rpc_unavailable`; nothing is sent.
-- `confidential: true` spends from and to confidential balances. Shield first if the agent's
+- Spends from the confidential balance to the recipient's confidential balance (the default).
+  `confidential: false` is refused with `public_balance_exit_only`. Shield first if the agent's
   confidential balance is short.
 - **near.com addresses.** near.com shows its users' Intents account as `nearcom:<account>`
   (e.g. `nearcom:0x20b6…2367`). The API takes only the bare account: strip `nearcom:` and
-  lowercase the rest. near.com users see their confidential balance, so send them a
-  `confidential: true` transfer by default. A public transfer still works when the user asks for
-  one, but it lands in the recipient's legacy public balance, which near.com does not show by
-  default: tell the user before sending. A `nearcom:` address is not on any chain: never
-  `withdraw` to it.
+  lowercase the rest. near.com users see their confidential balance, which is where a transfer
+  lands. A `nearcom:` address is not on any chain: never `withdraw` to it.
 
-## Shield / unshield
+## Shield
 
-Move `amount` of `asset` between the public and confidential balance of the same account.
-Read both with `GET …/balances?source=public|confidential`.
-Each move counts toward the asset's per-asset limits and `max_actions_per_hour` like any other
+Moves `amount` of `asset` from the public (legacy) balance into the confidential balance of the same
+account. Read them with `GET …/balances` (confidential) and `GET …/balances?source=public`.
+A shield counts toward the asset's per-asset limits and `max_actions_per_hour` like any other
 action (`policy_limit_exceeded` / `policy_action_limit_exceeded`), even though nothing leaves the account.
+
+`unshield` (confidential back to public) is still an endpoint but refuses every request with
+`public_balance_exit_only`. Do not offer it; to get funds out of the account, `withdraw`.
 
 ## Deposit (fund the account)
 
@@ -202,8 +215,9 @@ Idempotency-Key: dep:user123:<uuid>
 - `origin_asset` is required: the token and chain the payer sends from.
 - `amount` is optional. Without it, any payment ≥ `details.min_amount` before
   `details.expires_at` is credited; with it, the quote is exact.
-- `destination_asset` optional: swap to another asset on arrival. `confidential: true` credits the
-  confidential balance.
+- `destination_asset` optional: swap to another asset on arrival. The address credits the
+  confidential balance; `confidential: false` is refused with `public_balance_exit_only`. The policy
+  needs `confidential: true` (a stored policy without it gets `policy_action_denied`).
 - There is **no `refund_to` request field**: refunds always go back to the agent account;
   `details.refund_to` reports where.
 - Response `PENDING_DEPOSIT` with `details.deposit_address` (send funds **only** there),
@@ -228,6 +242,32 @@ Idempotency-Key: dep:user123:<uuid>
 Never show the `correlation_id` as a payment address. Use a fresh idempotency key per deposit
 request you want (reusing the key returns the same address).
 
+## Reference, note and receipts
+
+- **`reference`** (transfer, withdraw): your label for the payment, such as an order id; 1 to 128
+  printable ASCII characters, no spaces. Recorded with the request and proved by the receipt; never
+  sent to the provider or on chain, and not checked for uniqueness. Part of the request, so the same
+  `Idempotency-Key` with another `reference` is `idempotency_conflict`.
+- **`note`** (swap, limit order, withdraw, transfer, deposit): the agent's own words for why it runs
+  this, 1 to 500 characters on one line. For the owner only: it shows in `details.request.note`, the
+  receipts list and the audit evidence, and never reaches the provider, the chain or a receipt.
+  Nothing checks it is true; part of the request like `reference`. Dry runs accept and ignore both.
+- **`usd_value`**: a spending execution's status details carry the API's USD valuation of the amount
+  at dispatch (absent when no price was available). Not a quote or a settlement price.
+- **Receipts.** A completed transfer, withdrawal, swap, limit order or deposit has one:
+  `GET /v1/agents/{agent_id}/operations/{correlation_id}/receipt`, and
+  `GET /v1/agents/{agent_id}/receipts` (newest first; `type` = `transfer`, `withdraw`, `swap`,
+  `limit_order` or `deposit`; page with `cursor`, a page can be short while `next_cursor` is set).
+  Each item is `{ correlation_id, type, status, details, receipt }`: `status` is `PROVEN`,
+  `PENDING` (the next checkpoint will cover it) or `UNLOGGED` (before the log); `receipt` is null
+  until `PROVEN`. `details` is the account's own view (adds `usd_value`, `note`). The `receipt`
+  itself holds only the settled terms (recipient, asset, amount, `reference`, chain, memo,
+  settlement hashes), no agent, account or `note`, so it is safe to hand to a payee. It does not
+  prove who paid; a limit order's proves it was funded and placed, not filled. Anything else
+  (unfinished, shield, unshield, native signing) answers 409 `receipt_not_available`. Receipts last
+  as long as the audit log (90 days). Verify one with the SDK:
+  [status-and-recovery.md](status-and-recovery.md#receipts).
+
 ## Recover (rare)
 
 Only for `UNCERTAIN` operations that provably never reached the provider (no
@@ -238,12 +278,14 @@ Only for `UNCERTAIN` operations that provably never reached the provider (no
 ## Pre-flight checklist for an agent tool
 
 1. `GET …/policy` in force? action allowed? destination listed? budget `remaining_usd` enough?
-2. Balance enough? Read `available` / `available_raw` on `GET …/balances` (balance less queued or
-   timelocked work not yet dispatched); don't subtract queued work yourself.
+2. Balance enough? Read `available` / `available_raw` on `GET …/balances` (confidential, the account
+   the request spends from; `?source=public` only for a legacy balance to shield or withdraw). That is
+   the balance less queued or timelocked work not yet dispatched; don't subtract queued work yourself.
 3. Dry quote (swap/limit order/withdraw) and show it, with `fee` and `warnings`. A rule or check code in
    `warnings` means the live call would be refused with it: stop or adjust before sending. A refused
    quote (`wallet_frozen`, `agent_archived`, `agent_deleted`) means the account can do nothing.
-4. Create + persist the idempotency key and body, then send.
+4. Create + persist the idempotency key and body, then send, with a `reference` for a payment tied
+   to an order and a `note` saying why.
 5. Poll to a stable status, report `SUCCESS`/`REFUNDED`/`FAILED` with hashes; report an amount
    received (`amount_out`) only from `SUCCESS`; for `UNCERTAIN` say "outcome pending" and keep
-   observing.
+   observing. After `SUCCESS` a payee can be given the receipt.

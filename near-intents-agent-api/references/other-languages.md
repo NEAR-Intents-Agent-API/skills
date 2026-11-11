@@ -2,7 +2,7 @@
 
 The API is plain HTTPS + JSON. Any language works; you need:
 
-1. An HTTP client with per-request timeouts (65 s normal, 150 s for settlement writes: live swap, limit order, withdraw, transfer, shield, unshield).
+1. An HTTP client with per-request timeouts (65 s normal, 150 s for settlement writes: live swap, limit order, withdraw, transfer, shield).
 2. JSON that can keep `intent.payload` verbatim (raw bytes or an order-preserving tree).
 3. SHA-256, random bytes, base64url, hex — for grant tokens and idempotency keys.
 4. Only if you sign on the server: ed25519 + borsh-style byte packing (NEAR owners) or

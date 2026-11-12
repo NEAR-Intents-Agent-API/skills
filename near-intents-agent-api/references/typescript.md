@@ -199,7 +199,7 @@ runs in a Google Cloud TDX confidential VM with keys from its own KMS. A deploym
 answers `501 transparency_log_disabled`. The two-argument `verifyOperationProof(proof, origin)` of
 SDK 0.7.2 and earlier did not check for rollback; upgrade to 0.8.0.
 
-## Receipts
+## Receipts (SDK 0.9.0)
 
 ```ts
 import { fetchWitnessCheckpoint, logTileReader, verifyPaymentReceipt } from "@near-intents-agent-api/sdk";

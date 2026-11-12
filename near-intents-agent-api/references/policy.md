@@ -8,7 +8,7 @@ is required except `schedule`, `native` and `limit_order`.
 Policy = {
   frozen: boolean,
   actions: ("swap" | "transfer" | "withdraw" | "limit_order")[],   // unique; deposits are always allowed
-  confidential: boolean,                                  // shield/unshield + confidential form of each action
+  confidential: boolean,                                  // must be true in a new policy: shield + the confidential form of each action (the default)
   owner_approval: boolean,                                // every outgoing money action waits for the owner's vote
   assets: "any" | string[],                               // asset_id values, ≤128; "*" is refused, use "any"
   limits: {                                               // per-asset caps, atomic strings (1–78 digits); keys are asset_ids, never "*"
@@ -47,7 +47,7 @@ EvmTypedDataDomain = {                                    // ≥1 domain field, 
 
 Destination =
   | { action: "withdraw", chain: string, address: string, memo: string | null }   // external chain address
-  | { action: "transfer", address: string, confidential: boolean }                // NEAR Intents account
+  | { action: "transfer", address: string, confidential: boolean }                // NEAR Intents account; true in a new policy
 
 Schedule = {
   mode: "only" | "except",                                // run only inside the windows, or pause inside them
@@ -68,7 +68,7 @@ Unknown fields are rejected (strict objects). Field names are snake_case.
 |---|---|---|
 | `frozen` | kill switch: every money action refused (`wallet_frozen`). Use `agent_freeze`/`agent_unfreeze` intents, not a policy edit | provider |
 | `actions` | which money actions exist at all. Missing → `policy_action_denied`. `limit_order` allows placing limit orders; cancelling one needs no action | provider |
-| `confidential` | enables `shield`, `unshield`, and `confidential: true` on swap/withdraw/transfer/limit order | provider |
+| `confidential` | must be `true` in every new policy (`agent_create`, `policy_update`; `validation_failed` otherwise), with confidential `transfer` destinations. Enables `shield`, a deposit address and the confidential form (the default) of swap/withdraw/transfer/limit order. `unshield` is refused whatever the policy says. A stored policy with it off still applies: its agent can withdraw from the legacy public balance, but needs a `policy_update` turning it on to shield, take a deposit or do anything else | provider |
 | `owner_approval` | outgoing actions go `PENDING_APPROVAL` until the owner votes; deposits unaffected. Hard limits still reject first | provider |
 | `assets` | tokens the agent may spend (`"any"` or explicit ids; `"*"` is not an asset id and is refused with `validation_failed`, here and as a `limits` key). Swaps may buy unlisted tokens but not sell them | provider |
 | `limits` | per-asset caps per transaction and per rolling hour/day/month. Needs named assets to be meaningful | provider; per-transaction and windows also **API** |
@@ -100,7 +100,7 @@ any withdrawal, and a deposit back does not credit it. Swap quotes and withdrawa
 
 `limits` notes: the API refuses an amount above `per_transaction` with `policy_transaction_limit_exceeded` (403) before anything is
 recorded (native NEAR and wNEAR share one cap). It also counts hourly/daily/monthly limits and `max_actions_per_hour` per
-agent, shared by every grant, at dispatch. Swaps, limit orders, withdrawals, transfers, **shield and unshield**
+agent, shared by every grant, at dispatch. Swaps, limit orders, withdrawals, transfers and **shield**
 all count; `near` and `nep141:wrap.near` share one count. Pending/uncertain actions count until
 settled; a completed one counts for the full window after completion; removing a limit keeps the
 usage. Over → `policy_limit_exceeded` / `policy_action_limit_exceeded` (403); earlier actions
@@ -108,7 +108,7 @@ without a count → `policy_usage_unavailable` (409). Remaining per-asset allowa
 operation, no `FAILED` status, no charge; a timelocked one is judged, and can end `FAILED`, when released). Dry-run quotes and previews are not refused for these;
 they carry the same codes in `warnings`.
 
-`limit_order` notes (`actions` includes `limit_order`; `confidential: true` orders need `confidential` too):
+`limit_order` notes (`actions` includes `limit_order` and `confidential` is `true`):
 - `limit_order: { max_deviation_bps }` (0 to 300, default 100 when omitted) bounds the price a
   grant may set, so a leaked grant cannot sell the account's assets far below their value: a
   `sell` may be priced at most that many basis points below the market price (base asset's USD
@@ -253,7 +253,7 @@ Omit it and every native method is off. A policy update replaces the whole polic
 
 ```json
 {
-  "frozen": false, "actions": ["swap"], "confidential": false, "owner_approval": false,
+  "frozen": false, "actions": ["swap"], "confidential": true, "owner_approval": false,
   "assets": ["nep141:wrap.near", "<usdc asset_id>"],
   "limits": { "per_transaction": { "nep141:wrap.near": "10000000000000000000000000" } },
   "max_actions_per_hour": 30,
@@ -264,19 +264,18 @@ Omit it and every native method is off. A policy update replaces the whole polic
 ```
 
 **Limit-order trader**: the swap-only policy above with `"actions": ["swap", "limit_order"]` and
-`"limit_order": { "max_deviation_bps": 50 }` (prices at most 0.5% worse than the market). Add
-`"confidential": true` for confidential orders.
+`"limit_order": { "max_deviation_bps": 50 }` (prices at most 0.5% worse than the market).
 
 **Payroll / payouts to an allow-list with a review window**:
 
 ```json
 {
-  "frozen": false, "actions": ["transfer", "withdraw"], "confidential": false, "owner_approval": false,
+  "frozen": false, "actions": ["transfer", "withdraw"], "confidential": true, "owner_approval": false,
   "assets": ["<usdc asset_id>"],
   "limits": { "per_transaction": { "<usdc asset_id>": "500000000" }, "daily": { "<usdc asset_id>": "2000000000" } },
   "max_actions_per_hour": 10,
   "destinations": { "mode": "only", "list": [
-    { "action": "transfer", "address": "vendor.near", "confidential": false },
+    { "action": "transfer", "address": "vendor.near", "confidential": true },
     { "action": "withdraw", "chain": "base", "address": "0xabc…", "memo": null }
   ] },
   "budget": { "daily_usd": "2000", "weekly_usd": "5000", "monthly_usd": null },
@@ -305,7 +304,7 @@ explicitly accept that the agent can send anywhere.
 
 1. `view = GET /v1/agents/{id}/policy`. Require `status == "APPLIED"`.
 2. Check `GET /v1/agents/{id}` → `cooldowns.policy_change_available_at` is null or past.
-3. Build the complete new policy from `view.policy` (to remove a schedule, omit `schedule`).
+3. Build the complete new policy from `view.policy` (to remove a schedule, omit `schedule`). An agent whose stored policy has `confidential: false` or a public `transfer` destination must fix both now.
 4. `generate-intent {type: "policy_update", agent_id, policy, expected_revision: view.revision}`.
 5. Owner signs (`nep413`/`eip712` when only API-enforced fields changed (`destinations`, `budget`, `timelock_ms`,
    `schedule`, `limit_order.max_deviation_bps`), otherwise on chain).

@@ -218,7 +218,7 @@ class AgentApi:
     def get_agent(self, agent_id: str) -> dict[str, Any]:
         return self.request("GET", f"/v1/agents/{agent_id}")
 
-    def get_balances(self, agent_id: str, source: str = "public", asset: str | None = None) -> dict[str, Any]:
+    def get_balances(self, agent_id: str, source: str = "confidential", asset: str | None = None) -> dict[str, Any]:
         return self.request("GET", f"/v1/agents/{agent_id}/balances", query={"source": source, "asset": asset})
 
     def get_policy(self, agent_id: str) -> dict[str, Any]:

@@ -140,7 +140,7 @@ Adapt to your wallet library's result shape (near-connect / wallet-selector retu
 | `owner_nonce_invalid` | intent already used/expired → generate again |
 | `owner_command_stale` (409) | the intent was signed for an earlier owner state, or is the signature of a deletion that was later restored → generate again and sign again |
 | `limit_orders_open` (409) | `agent_delete`: a limit order is not payout-final yet → cancel or let it settle, then delete again |
-| `deletion_assets_remaining` (409) | `agent_delete`: the wallet still holds a public or confidential balance → withdraw it, then delete again |
+| `deletion_assets_remaining` (409) | `agent_delete`: the wallet still holds a public or confidential balance → withdraw it (a public one with `confidential: false`), then delete again |
 | `policy_revision_conflict` (409) | re-read `GET …/policy`, regenerate with its `revision`, re-sign |
 | `policy_reconciliation_required` | another policy intent is still open → wait for it to settle/expire |
 | `policy_change_throttled` / `agent_unfreeze_throttled` (429) | wait until `meta.available_at` (also on `GET /v1/agents/{id}` cooldowns) |

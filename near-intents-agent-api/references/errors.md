@@ -68,12 +68,12 @@ Every error is a JSON:API document:
 | `database_busy` | `api` | 503 | retryable; may have taken effect → retry with the **same** idempotency key, never a new one |
 | **Refusals (layer named; only that layer can lift it)** | | | |
 | `agent_grant_required` | `grant` | 403 | missing/revoked/expired/foreign grant → issue a grant or use the right token |
-| `policy_action_denied` | `policy` | 403 | action (or confidential form) not in policy → owner `policy_update` |
+| `policy_action_denied` | `policy` | 403 | action not in policy, or a stored policy with `confidential` off (shield, deposit) → owner `policy_update` |
 | `policy_transaction_limit_exceeded` | `policy` | 403 | amount above `limits.per_transaction` for the asset it spends (native NEAR and wNEAR share one cap). Plain refusal, nothing recorded → send less, or owner raises it |
 | `policy_destination_denied` | `policy` | 403 | address not allowed → owner adds it to `destinations`. Native NEAR a `native/near/transfer` sends, or a `native/near/call` attaches as deposit, is judged as a `withdraw` on chain `near`; a `solana/sign-transfer` recipient as a `withdraw` on chain `sol`. For `evm|solana/sign-intent` it is judged by `sign_intent` instead: **read `detail`** (unlisted receiver or withdrawal address → owner; a 1Click deposit address paid without its quote, an unsigned, tampered or dry quote, a wrong amount, a refund elsewhere or too much loss → get a fresh live quote, see [sign-intent.md](sign-intent.md)) |
 | `policy_schedule_denied` | `policy` | 403 | outside the owner's `schedule` when it would run (after the timelock); nothing recorded → submit the same request at `meta.available_at`, or owner changes `schedule` |
 | `spend_budget_exceeded` | `budget` | 403 | shared USD budget used up. A plain refusal for a request that runs now: no operation, no `FAILED` status, no charge (a timelocked one released over budget ends `FAILED`). Wait for the period to end (`usage.budget.*.resets_at`, or `spend.budget` on a dry run: the whole cap is back then) or owner raises cap, then send the request again |
-| `policy_limit_exceeded` | `policy` | 403 | the asset's hourly/daily/monthly limit would be passed (shield/unshield count too). Plain refusal, nothing recorded → wait for the window or owner raises it, then send again |
+| `policy_limit_exceeded` | `policy` | 403 | the asset's hourly/daily/monthly limit would be passed (shield counts too). Plain refusal, nothing recorded → wait for the window or owner raises it, then send again |
 | `policy_action_limit_exceeded` | `policy` | 403 | `max_actions_per_hour` used up. Plain refusal → wait for the hour or owner raises it, then send again |
 | `policy_price_deviation_exceeded` | `policy` | 403 | limit order priced worse than the market by more than `limit_order.max_deviation_bps` (default 100; a sell too far below, a buy too far above), `source.pointer` `/price`; nothing submitted or charged → price closer to the market, or owner changes `limit_order.max_deviation_bps` |
 | `market_price_unavailable` | `policy` | 503 | limit order: no fresh USD price for `/base_asset` or `/quote_asset`, so the price cannot be checked; nothing submitted or charged. No `meta.retryable` flag → send again under a new key once `GET /v1/tokens` prices both assets |
@@ -94,7 +94,8 @@ Every error is a JSON:API document:
 | `solana_transaction_forbidden` | `policy` | 403 | `solana/sign-transfer` message is not exactly one allowed SOL/SPL transfer; `detail` says what to change |
 | `provider_signature_invalid` | `provider` | 502 | the wallet provider's signature did not verify against the agent's key and was discarded; nothing returned → ask again, report `request_id` if it repeats |
 | **Execution / routing** | | | |
-| `insufficient_balance` | `balance` | 400/409 | the balance the request spends from (public or confidential) holds less than it spends; nothing submitted or charged. `meta.available_amount` is what it can still spend → fund the account or send at most that. The API's own check is 400 with no history row; a provider refusal is 409 |
+| `public_balance_exit_only` | `request` | 400 | `confidential: false` on swap, limit order, transfer or deposit address, or any unshield, live or `dry`; nothing submitted, **never retry**. Omit `confidential` (the confidential balance is the account). Leftover public funds: `shield` them, or `withdraw` with `confidential: false` (the only request that accepts it). A missing or invalid grant is reported first |
+| `insufficient_balance` | `balance` | 400/409 | the balance the request spends from (confidential, or the legacy public one for a shield or a `confidential: false` withdrawal) holds less than it spends; nothing submitted or charged. `meta.available_amount` is what it can still spend → fund the account or send at most that. The API's own check is 400 with no history row; a provider refusal is 409 |
 | `amount_too_low` | `request` | 400/409 | below the minimum → quote at least `meta.min_amount` (atomic units of the asset sent) when present, else a larger amount. 400: the API's own check (a limit order worth under 0.1 USD, `source.pointer` `/quantity`; a deposit quote); 409: the provider's route minimum |
 | `limit_order_not_found` | `request` | 404 | `GET`/cancel of an order id that is not this agent's → read `GET …/limit-orders` for the ids |
 | `limit_orders_open` | `api` | 409 | `agent_delete`: an order is not payout-final yet; checked before `deletion_assets_remaining`, and a fill or refund would land in a deleted account → cancel the orders (or freeze, which cancels them), wait until each `is_payout_status_final`, then delete (see [limit-orders.md](limit-orders.md)) |
@@ -147,8 +148,9 @@ Every error is a JSON:API document:
 | `operation_recovery_unavailable` | `api` | 409 | another recovery running → poll |
 | `agent_not_found`, `grant_not_found`, `intent_not_found`, `operation_not_found`, `approval_not_found` | `request` | 404 | wrong id or another account's; pass `correlation_id` exactly as returned |
 | `transparency_checkpoint_behind` | `api` | 409 | the server's published log is older than the checkpoint you sent as `from_size`; keep your trusted checkpoint, never reset it, and retry after the server recovers |
+| `receipt_not_available` | `request` | 409 | the operation has not completed, failed, or is not a transfer, withdrawal, swap, limit order or deposit (shield, unshield, native signing) → read it with `GET /v1/status`; prove it with the operation proof |
 | **Disabled** | | | |
-| `transparency_log_disabled` | `api` | 501 | this deployment keeps no transparency log; operation proofs are unavailable |
+| `transparency_log_disabled` | `api` | 501 | this deployment keeps no transparency log; operation proofs and receipts are unavailable |
 
 **Native NEAR outcomes are statuses, not HTTP errors.** A `native/near/transfer` or `native/near/call` reads
 `SUCCESS` only once two RPC operators agree NEAR finalized a transaction that is exactly the request;
@@ -188,7 +190,7 @@ account gets no quote: a swap quote and a withdrawal preview are both refused wi
 3. **Server failures** (`internal_error` 500, `database_busy` 503, `transaction_unconfirmed` 503,
    all with `meta.retryable`): the request may have taken effect. Repeat it with the **same** key,
    which replays or reconciles it, or read status. Never a new key: that can spend twice.
-4. **Proven refusals** (`route_unavailable`, `wallet_busy`, a recorded `provider_unavailable`, and
+4. **Proven refusals** (`public_balance_exit_only`, `route_unavailable`, `wallet_busy`, a recorded `provider_unavailable`, and
    the policy/grant/validation refusals in the decision table): nothing was sent. A refusal
    recorded as an operation's outcome replays under its key, so a later attempt is a new request →
    **new** idempotency key. Budget and limit refusals of a new execution

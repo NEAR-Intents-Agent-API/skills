@@ -43,6 +43,7 @@ When an execution is refused, the error code names what refused it and `layer` w
 | `agent_grant_required` | grant (missing, revoked, expired, wrong agent) | issue a grant / use the right token |
 | `wallet_frozen` | policy `frozen` | owner `agent_unfreeze` |
 | `policy_action_denied` | policy `actions` / `confidential` | owner `policy_update` |
+| `public_balance_exit_only` | request (`confidential: false` on swap, limit order, transfer or deposit; any unshield) | never retry; omit `confidential`; shield leftover public funds or withdraw them with `confidential: false` |
 | `policy_destination_denied` | policy `destinations` | owner `policy_update` |
 | `spend_budget_exceeded` | policy `budget` (USD, shared, per day/week/month) | owner raises cap, or wait until `resets_at` (when the period ends and the whole cap is back) |
 | `policy_limit_exceeded`, `policy_action_limit_exceeded` | policy `limits` (hourly/daily/monthly) / `max_actions_per_hour`, counted by the API | owner raises the limit, or wait for the window |
@@ -84,7 +85,7 @@ A policy is in force only when `GET …/policy` shows `status: "APPLIED"` and
 
 | | Owner intents | Executions |
 |---|---|---|
-| Endpoints | `POST /v1/generate-intent` → wallet signs → `POST /v1/submit-intent` | `POST /v1/agents/{id}/<action>` (swap, limit-orders, withdraw, transfer, shield, unshield, deposit) |
+| Endpoints | `POST /v1/generate-intent` → wallet signs → `POST /v1/submit-intent` | `POST /v1/agents/{id}/<action>` (swap, limit-orders, withdraw, transfer, shield, deposit) |
 | Authorized by | owner's signature on that exact payload | `X-Grant-Token` + the policy (deposit: API key only) |
 | Ids | `intent_…` | `op_…` |
 | Retry safety | resubmitting the same signature is idempotent | `Idempotency-Key` |
@@ -131,14 +132,17 @@ with `approval_vote`; EVM and passkey votes are confirmed by the owner's `0s` wa
 
 - Assets are NEAR Intents assets identified by `asset_id` (`nep141:…`, `nep245:…`) from
   `GET /v1/tokens`. Balances are per asset inside the agent's NEAR Intents account.
-- **Public** balance is normal. **Confidential** balance lives on `intents.far`, off the public
-  NEAR chain (requires policy `confidential: true`); `shield`/`unshield` move between them;
-  `confidential: true` on swap/withdraw/transfer spends from it. That is access control, not
-  cryptography: FAR's operators and Defuse can read it and give others access, solvers see each
-  intent, and shields, unshields and cross-chain moves stay visible on public chains. Never tell
-  a user it is anonymous or hidden from everyone.
+- The agent's account is its **confidential** balance, on `intents.far`, off the public NEAR
+  chain (requires policy `confidential: true`). Swap, limit order, transfer, withdraw and deposit
+  use it by default; `confidential: false` is refused with `public_balance_exit_only` on all of
+  them but `withdraw`. The **public** balance is legacy and can only be emptied: `shield` moves it
+  into the confidential balance, a `withdraw` with `confidential: false` pays it out, and
+  `unshield` is refused for every request. Balances read confidential unless `source=public`.
+  Confidential is access control, not cryptography: FAR's operators and Defuse can read it and
+  give others access, solvers see each intent, and shields and cross-chain moves stay visible on
+  public chains. Never tell a user it is anonymous or hidden from everyone.
 - **Deposits** come in through 1Click deposit addresses on any supported chain, or directly on
-  NEAR. Deposits never need a grant and are always allowed.
+  NEAR. A deposit address credits the confidential balance and never needs a grant.
 - **Withdrawals** leave NEAR Intents to an external chain address. **Transfers** go to another
   NEAR Intents account (no bridge).
 - Swaps and withdrawals route through 1Click; `dry: true` returns its quote with `spend`, `fee` and

@@ -12,7 +12,7 @@ guide is `GET /llms.txt`. If this file and the server disagree, the server wins.
   | Header | When |
   |---|---|
   | `X-API-Key: <partner API key>` | every endpoint except `/v1/network`, `/v1/tokens` |
-  | `X-Grant-Token: ngt_…` | swap, limit-orders (place, cancel, cancel-all), withdraw (including `dry: true` previews), transfer, shield, unshield, recover, every `native/…` route (not swap quotes or limit-order previews, not limit-order reads, not deposit) |
+  | `X-Grant-Token: ngt_…` | swap, limit-orders (place, cancel, cancel-all), withdraw (including `dry: true` previews), transfer, shield, recover, every `native/…` route (not swap quotes or limit-order previews, not limit-order reads, not deposit) |
   | `Idempotency-Key` | required on executions (a live limit order too), withdrawal previews and deposit (not on swap quotes, limit-order previews or cancels); optional on `generate-intent`. 8–128 chars `[A-Za-z0-9._:-]` |
   | `Content-Type: application/json` | every body |
 - Responses carry `x-request-id`; errors repeat it as `meta.request_id`. Log it.
@@ -24,7 +24,7 @@ guide is `GET /llms.txt`. If this file and the server disagree, the server wins.
 - **Pagination**: `{ data: [...], next_cursor: string | null }`; pass `cursor=<next_cursor>`
   until null. Policy history uses an integer cursor. The limit-order list is the exception: `{ data }`
   only, newest first, paged with `limit` (1–100) and `offset`; a page shorter than `limit` is the last.
-- **Timeouts**: give settlement writes (non-dry swap/limit order/withdraw/transfer/shield/unshield) ~150 s,
+- **Timeouts**: give settlement writes (non-dry swap/limit order/withdraw/transfer/shield) ~150 s,
   everything else ~65 s (long-poll is 30 s max). Don't retry on client timeout with a new key.
 - **Errors**: JSON:API `{ errors: [{ status, code, layer, title, detail?, source?, meta? }], meta: { request_id } }`.
   Branch on `errors[0].code`; `layer` (`request|auth|grant|policy|budget|balance|provider|api`)
@@ -66,6 +66,26 @@ Details: [owner-intents.md](owner-intents.md), signing: [signing.md](signing.md)
 | `GET /v1/agents/{agent_id}/history` | key | `cursor`, `limit` (1–100, default 25), `include_unpaid` (bool, default false) | page of `StatusResponse` |
 | `GET /v1/agents/{agent_id}/operations/{correlation_id}/proof` | key | path `correlation_id` is an `op_…` id; `from_size?` (the size of your trusted checkpoint, decimal string: adds a consistency path; a server behind it answers 409 `transparency_checkpoint_behind`) | `{ correlation_id, origin, checkpoint, consistency, notary, events }`: each audit event of the execution with a `c2sp.org/tlog-proof@v1` (`PROVEN`) and its `evidence` (the recorded result, hashed into the opening), `PENDING` until the next checkpoint, or `UNLOGGED`; `notary` holds the verifier keys and TDX birth attestation. A deployment without a transparency log answers 501 `transparency_log_disabled` |
 
+### Receipts
+
+| Method & path | Auth | Query | Returns |
+|---|---|---|---|
+| `GET /v1/agents/{agent_id}/operations/{correlation_id}/receipt` | key | `op_…` id in the path | `ReceiptItem` |
+| `GET /v1/agents/{agent_id}/receipts` | key | `cursor`, `limit` (1–100, default 25), `type` (`transfer` \| `withdraw` \| `swap` \| `limit_order` \| `deposit`) | `{ data: ReceiptItem[], next_cursor }`, newest first; with `type` a page can be short while `next_cursor` is set |
+
+```ts
+ReceiptItem = {
+  correlation_id, type: "transfer" | "withdraw" | "swap" | "limit_order" | "deposit",
+  status: "PROVEN" | "PENDING" | "UNLOGGED",
+  details: { settled_at, usd_value?, note?, grant_id?, policy_epoch?, …the settled terms… },  // the account's own view
+  receipt: { version: 1, origin, leaf_index, opening, terms } | null,                        // set once PROVEN; safe to hand to a payee
+}
+```
+
+An operation that is unfinished, failed, or of another type (shield, unshield, native signing) is 409
+`receipt_not_available`. 501 `transparency_log_disabled` when the deployment keeps no log. Verify
+a receipt with the SDK ([status-and-recovery.md](status-and-recovery.md#receipts)).
+
 ### Agents and reads
 
 | Method & path | Query | Returns |
@@ -73,7 +93,7 @@ Details: [owner-intents.md](owner-intents.md), signing: [signing.md](signing.md)
 | `GET /v1/agents` | `external_user_id`, `cursor` | page of `AgentView` |
 | `GET /v1/agents/{agent_id}` | | `AgentView` |
 | `GET /v1/agents/{agent_id}/wallet` | | `{ wallet_id, near_account_id }` |
-| `GET /v1/agents/{agent_id}/balances` | `source` = `public` \| `confidential`, `asset` | `{ near_account_id, source, balances: BalanceEntry[] }` |
+| `GET /v1/agents/{agent_id}/balances` | `source` = `confidential` (default) \| `public` (the legacy balance), `asset` | `{ near_account_id, source, balances: BalanceEntry[] }` |
 | `GET /v1/agents/{agent_id}/addresses/near` | | `{ chain: "near", address }` |
 | `GET /v1/agents/{agent_id}/policy` | | `PolicyView` |
 | `GET /v1/agents/{agent_id}/policy/history` | `cursor` (int), `limit` | page of policy revisions |
@@ -90,15 +110,22 @@ Details: [owner-intents.md](owner-intents.md), signing: [signing.md](signing.md)
 
 | Path | Auth | Body |
 |---|---|---|
-| `/swap` | key, grant, idem | `origin_asset`, `destination_asset`, `amount`, `min_amount_out?`, `confidential?`, `dry?` |
-| `/limit-orders` | key, grant, idem | `base_asset`, `quote_asset`, `side` (`sell`\|`buy`), `quantity` (atomic base), `price` (decimal string, quote per whole base), `deadline?` (RFC 3339, ≤ 7 days), `confidential?`, `dry?` |
+| `/swap` | key, grant, idem | `origin_asset`, `destination_asset`, `amount`, `min_amount_out?`, `confidential?`, `note?`, `dry?` |
+| `/limit-orders` | key, grant, idem | `base_asset`, `quote_asset`, `side` (`sell`\|`buy`), `quantity` (atomic base), `price` (decimal string, quote per whole base), `deadline?` (RFC 3339, ≤ 7 days), `confidential?`, `note?`, `dry?` |
 | `/limit-orders/{order_id}/cancel` → 200 | key, grant | none; returns the order (fields optional, `{}` possible) |
 | `/limit-orders/cancel-all` → 200 | key, grant | none; `{ known, cancelled, failed, remaining, complete }`, at most 50 per call |
-| `/withdraw` | key, grant, idem | `asset`, `amount`, `chain`, `recipient`, `memo?`, `confidential?`, `async?`, `dry?` |
-| `/transfer` | key, grant, idem | `asset`, `amount`, `recipient` (NEAR Intents account; a named one must exist on NEAR, else `invalid_address`; to pay another agent, its `wallet.near_account_id`, never its `agent_id`: funds sent there are lost), `confidential?` |
-| `/shield`, `/unshield` | key, grant, idem | `asset`, `amount` |
-| `/deposit` | key, idem | `origin_asset`, `destination_asset?`, `amount?`, `confidential?` |
+| `/withdraw` | key, grant, idem | `asset`, `amount`, `chain`, `recipient`, `memo?`, `reference?`, `confidential?`, `note?`, `async?`, `dry?` |
+| `/transfer` | key, grant, idem | `asset`, `amount`, `recipient` (NEAR Intents account; a named one must exist on NEAR, else `invalid_address`; to pay another agent, its `wallet.near_account_id`, never its `agent_id`: funds sent there are lost), `reference?`, `confidential?`, `note?` |
+| `/shield` | key, grant, idem | `asset`, `amount` (public → confidential) |
+| `/unshield` | key | `asset`, `amount`; refused: every request is `public_balance_exit_only` |
+| `/deposit` | key, idem | `origin_asset`, `destination_asset?`, `amount?`, `confidential?`, `note?` |
 | `/recover` | key, grant, idem (original) | `correlation_id`, `request: { type, …original body }` |
+
+`confidential` defaults to `true` everywhere. `confidential: false` is refused with
+`public_balance_exit_only` (400, layer `request`, not retryable, live and `dry`) on `/swap`,
+`/limit-orders`, `/transfer` and `/deposit`; `/withdraw` accepts it and pays from the legacy public
+balance. `reference` (1–128 printable ASCII, no spaces) and `note` (1–500 characters, one line)
+are described in [executions.md](executions.md#reference-note-and-receipts).
 
 ### Native accounts (all `POST /v1/agents/{agent_id}/native/…`, key + grant)
 
@@ -173,7 +200,7 @@ reads `PROCESSING`, with `details.provider_status` keeping the provider's own st
 
 | type | details |
 |---|---|
-| executions, `deposit`, `agent_delete` | `action`, `request?` (the request as admitted, in the request body's field names: optional `origin_asset`, `destination_asset`, `asset`, `amount`, `min_amount_out`, `chain`, `recipient`, `memo`, `side`, `price`, `quantity`, `deadline` (the last four for limit orders), `confidential`; `confidential` is the balance it spends from, or for a deposit credits), `near_account_id?`, `provider_request_id?`, `chain?`, `execute_after?`, `delay_ms?`, `approval_id?`, `intent_hash?`, `tx_hash?`, `destination_tx_hash?`, `amount_out?`, `order_id?` (limit order: the resting order's id), `available_amount?` (a FAILED `insufficient_balance` / `custody_native_balance_required`), `deposit_address?`, `memo?`, `min_amount?`, `min_amount_out?`, `expires_at?`, `deposit_seen_at?` (deposit: first sighting of funds), `refund_to?`, `refund_tx_hash?`, `failure_reason?`, `reason?` (NEEDS_REVIEW), `never_executed?`, `never_submitted?`, `settled_late?`, + provider fields |
+| executions, `deposit`, `agent_delete` | `action`, `request?` (the request as admitted, in the request body's field names: optional `origin_asset`, `destination_asset`, `asset`, `amount`, `min_amount_out`, `chain`, `recipient`, `memo`, `reference`, `note`, `side`, `price`, `quantity`, `deadline` (the last four for limit orders), `confidential`; `confidential` is the balance it spends from, or for a deposit credits), `near_account_id?`, `provider_request_id?`, `chain?`, `execute_after?`, `delay_ms?`, `approval_id?`, `intent_hash?`, `tx_hash?`, `destination_tx_hash?`, `amount_out?`, `order_id?` (limit order: the resting order's id), `usd_value?` (the API's USD valuation at dispatch), `available_amount?` (a FAILED `insufficient_balance` / `custody_native_balance_required`), `deposit_address?`, `memo?`, `min_amount?`, `min_amount_out?`, `expires_at?`, `deposit_seen_at?` (deposit: first sighting of funds), `refund_to?`, `refund_tx_hash?`, `failure_reason?`, `reason?` (NEEDS_REVIEW), `never_executed?`, `never_submitted?`, `settled_late?`, + provider fields |
 | `agent_create` | `agent_id`, `revision`, `policy_hash`, `transaction_hash` |
 | `policy_update`, `agent_freeze`, `agent_unfreeze` | `revision`, `policy_hash`, `transaction_hash` (null when the revision applied without a blockchain transaction) |
 | `grant_issue` | `grant: GrantView \| null` |
@@ -235,7 +262,8 @@ The `Policy` shape is in [policy.md](policy.md).
 H=(-H "X-API-Key: $NEAR_INTENTS_AGENT_API_KEY" -H "Content-Type: application/json")
 curl -s "$NEAR_INTENTS_AGENT_API_URL/v1/agents?external_user_id=user_123" "${H[@]}"
 curl -s "$NEAR_INTENTS_AGENT_API_URL/v1/agents/$AGENT_ID/policy" "${H[@]}"
-curl -s "$NEAR_INTENTS_AGENT_API_URL/v1/agents/$AGENT_ID/balances?source=public" "${H[@]}"
+curl -s "$NEAR_INTENTS_AGENT_API_URL/v1/agents/$AGENT_ID/balances" "${H[@]}"                  # confidential
+curl -s "$NEAR_INTENTS_AGENT_API_URL/v1/agents/$AGENT_ID/balances?source=public" "${H[@]}"     # legacy public balance
 curl -s "$NEAR_INTENTS_AGENT_API_URL/v1/status?correlation_id=$CID&wait_ms=30000" "${H[@]}"
 curl -s -X POST "$NEAR_INTENTS_AGENT_API_URL/v1/agents/$AGENT_ID/swap" "${H[@]}" -H "X-Grant-Token: $GRANT" \
   -d '{"origin_asset":"nep141:wrap.near","destination_asset":"'"$USDC"'","amount":"100000000000000000000000","dry":true}'

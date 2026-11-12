@@ -56,7 +56,7 @@ GET /v1/status?correlation_id=<id>&wait_ms=30000
   `include_unpaid=true`; read one by its `op_…` id with `GET /v1/status`.
 - `details.request` on an execution's status and history echoes the request as admitted, in the
   request body's field names (`origin_asset`, `destination_asset`, `asset`, `amount`,
-  `min_amount_out`, `chain`, `recipient`, `memo`, `confidential`, each only when it applies; a limit
+  `min_amount_out`, `chain`, `recipient`, `memo`, `reference`, `note`, `confidential`, each only when it applies; a limit
   order adds `side`, `price`, `quantity`, `deadline`, with `origin_asset`/`amount` what it spends), so a
   client can show a transfer's recipient or what is reserved per asset. Executions admitted before
   it was recorded have none.
@@ -142,6 +142,23 @@ Pin the origin (`<API host>/log`, `api.agentsonintents.com/log` for the hosted A
 witness key yourself, and never take either from an API response. A server behind the head
 answers `409 transparency_checkpoint_behind`: keep your trusted checkpoint, never reset it, and retry once the server has recovered. See
 [typescript.md](typescript.md#operation-proofs) and the examples' `11:verify-operation`.
+
+## Receipts
+
+A completed transfer, withdrawal, swap, limit order or deposit has a receipt: a leaf of the same log,
+with no agent, account, `usd_value` or `note` in it, so it can be handed to a payee. Read it with
+`GET /v1/agents/{agent_id}/operations/{correlation_id}/receipt` (`receipt` is null while `PENDING`,
+and for `UNLOGGED`) or list them with `GET …/receipts?type=` ([executions.md](executions.md#reference-note-and-receipts)).
+With the SDK, `api.getReceipt` / `api.listReceipts` read them. Anyone verifies `item.receipt` with
+`verifyReceipt(receipt, { origin, trusted, readTile })`; a payee owed a transfer or withdrawal uses
+`verifyPaymentReceipt`, with `expect` holding the exact `recipient`, `asset`, `amount` and the
+`reference` it issued (plus `chain` and `memo` for a withdrawal). `expect.confidential` omitted
+accepts a **confidential** payment only, the account's default; pass `confidential: false` to accept
+one paid from the legacy public balance (a withdrawal sent with `confidential: false`). A receipt does
+not prove who paid, and a withdrawal's `amount` is the debit, not what arrived: issue one `reference`
+per order and accept each `correlation_id` once. `ReceiptNotCoveredError` or `LogUnavailableError`:
+retry with a newer head or later; `NoteError` or `ProofError`: reject. See
+[typescript.md](typescript.md#receipts). Receipts last as long as the audit log (90 days).
 
 ## Revocation and freezing vs in-flight work
 

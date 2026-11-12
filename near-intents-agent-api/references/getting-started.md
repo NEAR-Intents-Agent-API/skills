@@ -75,7 +75,7 @@ Content-Type: application/json
   "policy": {
     "frozen": false,
     "actions": ["swap"],
-    "confidential": false,
+    "confidential": true,
     "owner_approval": false,
     "assets": ["nep141:wrap.near", "<usdc asset_id>"],
     "limits": { "per_transaction": { "nep141:wrap.near": "5000000000000000000000000" } },
@@ -142,7 +142,7 @@ Idempotency-Key: dep_7f3c…
 ```
 
 Returns `PENDING_DEPOSIT` (only deposits report it) with `details.deposit_address`, `details.memo` (send it when present),
-`details.min_amount`, `details.expires_at`, `details.refund_to` (the agent account). Show those
+`details.min_amount`, `details.expires_at`, `details.refund_to` (the agent account). The funds are credited to the confidential balance. Show those
 to the payer, then poll the `correlation_id` until `SUCCESS`. On NEAR you can also send NEP-141
 tokens straight to `GET /v1/agents/{agent_id}/addresses/near`.
 
@@ -162,7 +162,7 @@ The account's rules do not refuse it; an unlisted asset or invalid recipient doe
 the share the route keeps, `warnings` any `high_fee` plus each rule the live swap would fail
 (policy, schedule, USD budget, limits, balance) under the code the live swap would get. A frozen, archived or deleted
 account gets no quote: `wallet_frozen`, `agent_archived` or `agent_deleted`. Drop `dry` to execute:
-you get `202` with a `StatusResponse` (`op_…`). Poll it to a terminal status. See [executions.md](executions.md) and [status-and-recovery.md](status-and-recovery.md).
+you get `202` with a `StatusResponse` (`op_…`). The swap runs on the confidential balance: omit `confidential` (`confidential: false` is refused with `public_balance_exit_only`). Poll it to a terminal status. See [executions.md](executions.md) and [status-and-recovery.md](status-and-recovery.md).
 
 ## 8. Before going live
 

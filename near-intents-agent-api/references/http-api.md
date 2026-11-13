@@ -99,7 +99,7 @@ a receipt with the SDK ([status-and-recovery.md](status-and-recovery.md#receipts
 | `GET /v1/agents/{agent_id}/policy/history` | `cursor` (int), `limit` | page of policy revisions |
 | `GET /v1/agents/{agent_id}/grants` | | `{ data: GrantView[] }` (revoked included) |
 | `GET /v1/agents/{agent_id}/executions/scheduled` | `cursor`, `limit` | `{ data: [{ correlation_id, execute_after, state, action }], next_cursor }` |
-| `GET /v1/agents/{agent_id}/approvals` | | `{ data: ApprovalView[] }` |
+| `GET /v1/agents/{agent_id}/approvals` | | `{ data: ApprovalView[], truncated }` (at most 100; `truncated` only when the provider holds approvals the API did not create; 503 `provider_unavailable` if it cannot finish in 20 s) |
 | `GET /v1/agents/{agent_id}/approvals/{approval_id}` | | `ApprovalView` |
 | `GET /v1/agents/{agent_id}/containment` | `grants_cursor`, `operations_cursor` | live grants + unfinished operations ("what is still able to act") |
 | `GET /v1/agents/{agent_id}/limit-orders` | `open` (bool), `limit` (1–100), `offset` | `{ data: LimitOrderView[] }`, newest first, as 1Click lists them (status not refreshed) |
@@ -204,7 +204,7 @@ reads `PROCESSING`, with `details.provider_status` keeping the provider's own st
 | `agent_create` | `agent_id`, `revision`, `policy_hash`, `transaction_hash` |
 | `policy_update`, `agent_freeze`, `agent_unfreeze` | `revision`, `policy_hash`, `transaction_hash` (null when the revision applied without a blockchain transaction) |
 | `grant_issue` | `grant: GrantView \| null` |
-| `grant_revoke` | `grant_id`, `committed_correlation_ids`, `committed_truncated` |
+| `grant_revoke` | `grant_id`, `committed_correlation_ids`, `committed_cancellations` (`[{ order_id \| null, committed_at }]`, limit-order cancels that may still reach the provider), `committed_truncated` |
 | `execution_cancel` | `cancelled_correlation_id` |
 | `agent_archive`, `agent_restore` | `archived` |
 | `approval_vote` | `approval_id`, `verdict` |

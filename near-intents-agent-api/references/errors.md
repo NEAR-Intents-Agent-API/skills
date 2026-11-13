@@ -77,6 +77,7 @@ Every error is a JSON:API document:
 | `policy_action_limit_exceeded` | `policy` | 403 | `max_actions_per_hour` used up. Plain refusal → wait for the hour or owner raises it, then send again |
 | `policy_price_deviation_exceeded` | `policy` | 403 | limit order priced worse than the market by more than `limit_order.max_deviation_bps` (default 100; a sell too far below, a buy too far above), `source.pointer` `/price`; nothing submitted or charged → price closer to the market, or owner changes `limit_order.max_deviation_bps` |
 | `market_price_unavailable` | `policy` | 503 | limit order: no fresh USD price for `/base_asset` or `/quote_asset`, so the price cannot be checked; nothing submitted or charged. No `meta.retryable` flag → send again under a new key once `GET /v1/tokens` prices both assets |
+| `approval_backlog_full` | `policy` | 409 | `owner_approval` and 100 requests from this agent already wait for the owner's vote; nothing recorded or sent → the owner approves or rejects some with `approval_vote`, then send again. Failed requests take no place |
 | `policy_usage_unavailable` | `policy` | 409 | earlier actions have no per-asset count and a limit applies; nothing recorded or sent → clears when they leave the window, or the operator reconciles them |
 | `policy_denied` | `policy` | 409 | provider-side policy refused (asset, per-asset limit, hourly rate, …) → owner `policy_update` |
 | `wallet_frozen` | `policy` | 409 | owner froze the account → only `agent_unfreeze` resumes |
@@ -167,7 +168,7 @@ preview (`dry: true`): it returns `200`. Each one the live request would fail is
 whose `code` is the live code: `policy_action_denied`, `policy_destination_denied`,
 `policy_asset_denied`, `policy_transaction_limit_exceeded`, `policy_schedule_denied` (with `available_at`), `spend_price_unavailable`,
 `spend_budget_exceeded`, `policy_limit_exceeded`, `policy_action_limit_exceeded`,
-`policy_usage_unavailable` or `insufficient_balance` (with `available_amount`), and for a limit order
+`policy_usage_unavailable`, `approval_backlog_full` or `insufficient_balance` (with `available_amount`), and for a limit order
 `amount_too_low`, `policy_price_deviation_exceeded` or `market_price_unavailable`, with the same meaning
 and the same layer to change. Such a code in `warnings` means the live request will be refused with
 it: tell the user, reduce the amount, wait, or ask the owner to change the policy. An asset

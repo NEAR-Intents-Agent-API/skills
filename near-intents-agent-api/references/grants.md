@@ -64,7 +64,9 @@ activity feeds and audits.
 ```
 
 Takes effect for anything not yet dispatched. Operations already past the dispatch commit finish;
-`details.committed_correlation_ids` lists them (`committed_truncated` if the list was cut). A limit
+`details.committed_correlation_ids` lists them (`committed_truncated` if the list was cut).
+`details.committed_cancellations` lists limit-order cancels made with the grant that may still reach
+the provider (`{ order_id, committed_at }`, `order_id` null for cancel-all): read those orders. A limit
 order already resting stays on the book: revoking the placing grant does not cancel it, and
 cancelling needs a live grant (any of the account's), so keep one that can.
 Expired grants stop working by themselves.

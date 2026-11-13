@@ -124,6 +124,7 @@ Types: `LimitOrderRequest`, `LimitOrderView`, `LimitOrderPage`, `CancelLimitOrde
 `listApprovals`, `getApproval`, `listLimitOrders`, `getLimitOrder`, `getAddress(id, "near")`, `listProviderRecords(id, kind)`,
 `getHistory(id, { cursor, limit, include_unpaid })`, `getStatus(cid, { waitMs, refresh })`,
 `getOperationProof(id, cid)`, `getReceipt(id, cid)`, `listReceipts(id, { type, limit, cursor })`.
+`listApprovals` returns the array (at most 100) and drops the listing's `truncated` flag (SDK 0.9.1).
 
 ## Native accounts
 

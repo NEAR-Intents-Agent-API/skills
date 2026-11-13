@@ -39,6 +39,7 @@ POST …/withdraw  { "asset": "<usdc>", "amount": "5000000", "chain": "base", "r
                               | "policy_action_denied" | "policy_destination_denied" | "policy_asset_denied"
                               | "policy_transaction_limit_exceeded" | "policy_schedule_denied" | "spend_price_unavailable" | "spend_budget_exceeded"
                               | "policy_limit_exceeded" | "policy_action_limit_exceeded" | "policy_usage_unavailable"
+                              | "approval_backlog_full"
                               | "insufficient_balance"
                               | "amount_too_low" | "policy_price_deviation_exceeded" | "market_price_unavailable",   // the last three: limit orders
                         "detail": string, "available_at"?: string, "available_amount"?: string } ],
@@ -62,7 +63,7 @@ policy's action switch and destination rule, `assets`, `limits.per_transaction`,
 Each one it would fail is a `warnings` entry whose `code` is the code the live request
 would get (`policy_action_denied`, `policy_destination_denied`, `policy_asset_denied`,
 `policy_transaction_limit_exceeded`, `policy_schedule_denied`, `spend_price_unavailable`, `spend_budget_exceeded`, `policy_limit_exceeded`,
-`policy_action_limit_exceeded`, `policy_usage_unavailable`, `insufficient_balance`; for a limit order
+`policy_action_limit_exceeded`, `policy_usage_unavailable`, `approval_backlog_full`, `insufficient_balance`; for a limit order
 also `amount_too_low`, `policy_price_deviation_exceeded`, `market_price_unavailable`).
 `policy_schedule_denied` also carries `available_at`, when the schedule next
 allows it; `insufficient_balance` carries `available_amount`, what the balance can still spend (atomic

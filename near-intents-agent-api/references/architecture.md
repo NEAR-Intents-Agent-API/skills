@@ -89,7 +89,7 @@ holds the grant token in its environment; one grant per MCP client installation.
 - [ ] Partner API key only in server secret storage; separate keys per environment. Keys expire
       365 days after creation: rotate by creating a new key in the partner portal, deploying, then
       revoking the old one there (a revoked key stops new dispatches at once).
-- [ ] Grant tokens encrypted at rest, never logged, never in prompts, URLs or client bundles.
+- [ ] Grant tokens encrypted at rest, never logged, never in prompts, URLs or client bundles. CI and cloud workloads use a federated grant ([workload-identity.md](workload-identity.md)) so no long-lived token exists; `ngs_` sessions, identity JWTs and proofs are never logged either, and KMS keys stay in the KMS.
 - [ ] One grant per actor; short expiry for sessions; revoke on logout/uninstall.
 - [ ] BFF checks user ↔ agent ↔ correlation_id ownership on every route.
 - [ ] Owner sees `preview.summary` + full policy before signing; deletes show `assets_lost`.

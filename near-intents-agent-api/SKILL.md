@@ -1,6 +1,6 @@
 ---
 name: near-intents-agent-api
-description: Build on the NEAR Intents Agent API (api.agentsonintents.com) in any language — TypeScript, Python, Rust, Go or plain HTTP. Use when integrating AI-agent wallets on NEAR Intents into an app or backend, when code mentions partner API keys (`X-API-Key`), `ngt_` grant tokens, `X-Grant-Token`, `generate-intent`/`submit-intent`, `@near-intents-agent-api/sdk`, `sign-intent`/`sign-in`/`sign-transfer` native routes, owner-signed spending policies, agent swaps/limit orders/transfers/withdrawals/deposits, or when someone wants an AI agent to hold and move funds under owner-set limits.
+description: Build on the NEAR Intents Agent API (api.agentsonintents.com) in any language — TypeScript, Python, Rust, Go or plain HTTP. Use when integrating AI-agent wallets on NEAR Intents into an app or backend, when code mentions partner API keys (`X-API-Key`), `ngt_` grant tokens, `X-Grant-Token`, workload identity federation (`ngs_` sessions, `X-Grant-Proof`, OIDC or key-bound grants for CI and cloud workloads), `generate-intent`/`submit-intent`, `@near-intents-agent-api/sdk`, `sign-intent`/`sign-in`/`sign-transfer` native routes, owner-signed spending policies, agent swaps/limit orders/transfers/withdrawals/deposits, or when someone wants an AI agent to hold and move funds under owner-set limits.
 ---
 
 # NEAR Intents Agent API
@@ -14,7 +14,7 @@ partner API key and never touches anyone's private keys.
 |---|---|---|
 | **Partner** (your backend) | Partner API key (`X-API-Key`) from the [partner portal](https://partners.near-intents.org/) | Calls every endpoint, prepares owner actions, stores grants |
 | **Owner** (end user) | Their wallet: NEAR account, EVM key or passkey | Signs: create account, policy, grants, freeze, approve, delete |
-| **Agent** (assistant, bot, session) | Grant token `ngt_…` (held by your backend) | Moves money inside the owner's policy |
+| **Agent** (assistant, bot, session) | Grant token `ngt_…` (held by your backend), or a federated identity: `ngs_…` session / `X-Grant-Proof` | Moves money inside the owner's policy |
 
 Hosted API: `https://api.agentsonintents.com` (mainnet, real funds), also the TypeScript SDK's
 default `baseUrl`. Machine-readable contract: `/openapi.json`; compact LLM guide: `/llms.txt`.
@@ -26,7 +26,7 @@ with it, or lose access to them. It is operated by NEAR Technologies Limited.
 
 Follow these in every integration; most bugs and lost-fund incidents come from breaking one.
 
-1. **API key and grant tokens are backend-only.** Never ship the partner API key or `ngt_…` tokens to a browser, mobile
+1. **API key and grant tokens are backend-only.** Never ship the partner API key or `ngt_…`/`ngs_…` tokens to a browser, mobile
    app, prompt, log or LLM context. Browsers only see `intent.payload` + `preview` and return the
    wallet's output.
 2. **The owner's wallet signs `intent.payload` exactly as returned.** Pick the method from
@@ -106,6 +106,10 @@ owner signs ──► agent_create (policy) ──► grant_issue (token commitm
 2. **Issue a grant** — your backend makes a random `ngt_…` token, sends only its SHA-256 hex as
    `credential` in `grant_issue` with `label` and `expires_at` (≤365 days); owner signs; you store
    the token encrypted.
+   For a CI job or cloud workload prefer a **federated grant**: `credential` is `{type:"oidc", issuer, claims}`
+   or `{type:"public_key", jwk}`, the workload exchanges its short-lived identity for an `ngs_…` session
+   (`POST …/grants/token`) or signs `X-Grant-Proof` per request, and no long-lived secret exists
+   ([references/workload-identity.md](references/workload-identity.md)).
 3. **Fund** — `POST /v1/agents/{agent_id}/deposit {origin_asset}` (API key + Idempotency-Key, no
    grant; `amount` optional) returns `details.deposit_address`, `min_amount`, `expires_at`,
    optional `memo`, and `refund_to` (the agent's own balance). It credits the confidential balance.
@@ -149,7 +153,8 @@ The Python and Rust signers are verified byte-for-byte against near-api-js and v
 | Run owner actions, previews, expiry, cooldowns, BFF split | [references/owner-intents.md](references/owner-intents.md) |
 | Sign `nep413` / `nep366` / `eip712` / `webauthn` correctly | [references/signing.md](references/signing.md) |
 | Write or edit a policy (actions, limits, destinations, USD budget, limit-order price bound, timelock, schedule, approval) | [references/policy.md](references/policy.md) |
-| Issue, use, store, revoke grants | [references/grants.md](references/grants.md) |
+| Issue, use, store, revoke grants; pick a credential kind (`token` / `oidc` / `public_key`) | [references/grants.md](references/grants.md) |
+| Give a CI job, cloud workload or key-holding server a grant with no long-lived secret (GitHub Actions, GitLab, GCP, AWS, Kubernetes, Entra, Vercel, KMS; exchange, `X-Grant-Proof`) | [references/workload-identity.md](references/workload-identity.md) |
 | Swap, transfer, withdraw, deposit, shield, quotes, chains, `reference` / `note`, receipts | [references/executions.md](references/executions.md) |
 | Place, follow and cancel limit orders (resting orders, price bound, containment, delete guard) | [references/limit-orders.md](references/limit-orders.md) |
 | Statuses, polling, idempotency, `UNCERTAIN`, `/recover`, operation proofs, verifying receipts | [references/status-and-recovery.md](references/status-and-recovery.md) |

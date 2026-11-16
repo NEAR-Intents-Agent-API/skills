@@ -30,4 +30,8 @@ async fn matches_reference_signers() {
     let (token, commitment) = create_grant_credential();
     assert_eq!(token.len(), 47);
     assert_eq!(grant_commitment(&token), commitment);
+    let api = AgentApi::new("key".to_string(), None).unwrap();
+    assert!(api.for_grant(token).is_ok());
+    assert!(api.for_grant(format!("ngs_{}", "A".repeat(43))).is_ok());
+    assert!(api.for_grant(format!("ngx_{}", "A".repeat(43))).is_err());
 }

@@ -12,7 +12,8 @@ guide is `GET /llms.txt`. If this file and the server disagree, the server wins.
   | Header | When |
   |---|---|
   | `X-API-Key: <partner API key>` | every endpoint except `/v1/network`, `/v1/tokens` |
-  | `X-Grant-Token: ngt_…` | swap, limit-orders (place, cancel, cancel-all), withdraw (including `dry: true` previews), transfer, shield, recover, every `native/…` route (not swap quotes or limit-order previews, not limit-order reads, not deposit) |
+  | `X-Grant-Token: ngt_…` or `ngs_…` | swap, limit-orders (place, cancel, cancel-all), withdraw (including `dry: true` previews), transfer, shield, recover, every `native/…` route (not swap quotes or limit-order previews, not limit-order reads, not deposit). `ngt_…` is a grant token; `ngs_…` is a session on a federated grant from `POST …/grants/token` |
+  | `X-Grant-Proof: <JWT>` | the same endpoints, **instead of** `X-Grant-Token`, for a `public_key` grant. Never both (`validation_failed`). See [Signing every request](#signing-every-request-x-grant-proof) |
   | `Idempotency-Key` | required on executions (a live limit order too), withdrawal previews and deposit (not on swap quotes, limit-order previews or cancels); optional on `generate-intent`. 8–128 chars `[A-Za-z0-9._:-]` |
   | `Content-Type: application/json` | every body |
 - Responses carry `x-request-id`; errors repeat it as `meta.request_id`. Log it.
@@ -98,6 +99,7 @@ a receipt with the SDK ([status-and-recovery.md](status-and-recovery.md#receipts
 | `GET /v1/agents/{agent_id}/policy` | | `PolicyView` |
 | `GET /v1/agents/{agent_id}/policy/history` | `cursor` (int), `limit` | page of policy revisions |
 | `GET /v1/agents/{agent_id}/grants` | | `{ data: GrantView[] }` (revoked included) |
+| `POST /v1/agents/{agent_id}/grants/token` | key; `grant_type`, `subject_token`, `subject_token_type`, `grant_id?` | `{ access_token: "ngs_…", issued_token_type, token_type: "N_A", expires_in, expires_at, grant_id, label }`. See [Workload identity](#workload-identity-exchange-and-proofs) |
 | `GET /v1/agents/{agent_id}/executions/scheduled` | `cursor`, `limit` | `{ data: [{ correlation_id, execute_after, state, action }], next_cursor }` |
 | `GET /v1/agents/{agent_id}/approvals` | | `{ data: ApprovalView[], truncated }` (at most 100; `truncated` only when the provider holds approvals the API did not create; 503 `provider_unavailable` if it cannot finish in 20 s) |
 | `GET /v1/agents/{agent_id}/approvals/{approval_id}` | | `ApprovalView` |
@@ -173,6 +175,88 @@ same key may try again. An archived, deleted or frozen account gets no quote: a 
 withdrawal preview are both refused with 409 `agent_archived`, `agent_deleted` or `wallet_frozen`
 and reach no provider. A warning-free answer is a snapshot, not a reservation. Shape and details: [executions.md](executions.md).
 
+### Workload identity: exchange and proofs
+
+A grant whose `credential` is `{ type: "oidc", … }` or `{ type: "public_key", jwk }` has no token to
+send. Which to use and the platform recipes: [workload-identity.md](workload-identity.md). On the wire:
+
+**Exchange** a workload's JWT (an OIDC identity token, or a key assertion) for a session token. It
+needs `X-API-Key` and takes no `Idempotency-Key`:
+
+```bash
+curl -s -X POST "$API_URL/v1/agents/$AGENT_ID/grants/token" \
+  -H "X-API-Key: $NEAR_INTENTS_AGENT_API_KEY" -H "Content-Type: application/json" \
+  -d '{"grant_type":"urn:ietf:params:oauth:grant-type:token-exchange",
+       "subject_token":"'"$JWT"'",
+       "subject_token_type":"urn:ietf:params:oauth:token-type:jwt"}'
+# -> { "access_token": "ngs_…", "token_type": "N_A", "expires_in": 900, "expires_at": "…", "grant_id": "…", "label": "…" }
+```
+
+- `subject_token_type` is `urn:ietf:params:oauth:token-type:jwt` (or `…:id_token`). `subject_token` is a
+  compact JWT of at most 16,384 characters. A missing or non-string field is `validation_failed`.
+- `grant_id` (optional): send it only when the token matches several live grants (`grant_ambiguous`).
+- `access_token` goes in `X-Grant-Token` beside `X-API-Key`; `token_type: "N_A"` means it is **not** an
+  `Authorization` bearer. Cache it until about 60 s before `expires_at` (15 min default, 60 max,
+  never past the grant); a grant holds at most 100 live sessions. Revoking, expiry or an owner
+  change ends every session at once.
+- **OIDC `subject_token`**: the platform's identity token for audience `{API url}/v1/agents/{agent_id}`
+  (the API url is `servers[0]` of `/openapi.json`; no trailing slash).
+- **Key-assertion `subject_token`** (a `public_key` grant): a JWT the grant's key signs, **single use**,
+  header `alg` `EdDSA` (Ed25519) or `ES256` (P-256), claims `iss` = `sub` = the key's thumbprint URI,
+  `aud` = `{API url}/v1/agents/{agent_id}/grants/token`, `iat`, `exp` (at most 5 minutes after `iat`),
+  `jti` (unique, 16 to 256 characters). Build it as in the proof recipe below.
+- Errors: `subject_token_invalid` 401, `agent_grant_required` 403, `grant_ambiguous` 409,
+  `grant_session_limit_reached` 429, `issuer_unavailable` and `transparency_unavailable` 503. See
+  [errors.md](errors.md#workload-identity).
+
+#### Signing every request: `X-Grant-Proof`
+
+A `public_key` grant may skip the exchange and send, on any endpoint that takes `X-Grant-Token`, a JWT
+its key signs for that one request as `X-Grant-Proof`. `X-API-Key` is still required.
+
+| Claim | Value |
+|---|---|
+| header `alg` | `EdDSA` for an Ed25519 key, `ES256` for P-256 |
+| `iss`, `sub` | The key's RFC 9278 thumbprint URI: `urn:ietf:params:oauth:jwk-thumbprint:sha-256:` + base64url(SHA-256 of the RFC 7638 canonical JWK) |
+| `grant_id` | The `grant_id` of the live `public_key` grant that binds this key. Keep the original id on retries and recovery |
+| `aud` | One string (a list is refused): `{API url}` + the request path, **without query or fragment**, e.g. `https://api.agentsonintents.com/v1/agents/{agent_id}/transfer`. Never the `Host` header |
+| `htm` | The method, uppercase: `POST` |
+| `body_sha256` | Lowercase hex SHA-256 of the **exact body bytes sent**; of zero bytes when there is no body (`e3b0c442…7852b855`) |
+| `idempotency_key` | The `Idempotency-Key` header exactly as sent. **Omit the claim** when the request sends none |
+| `iat`, `exp` | `exp` at most 5 minutes after `iat` (30 s clock skew allowed). Use about 1 minute |
+| `jti` | Unique, 16 to 256 characters (a UUID works). Spent on first use |
+
+By hand, for one request:
+
+1. Serialize the body **once** to bytes and compute `body_sha256` over those bytes; send exactly those bytes. Re-serializing (key order, spacing, escaping) changes the hash.
+2. The thumbprint: for Ed25519 hash `{"crv":"Ed25519","kty":"OKP","x":"…"}`; for P-256
+   `{"crv":"P-256","kty":"EC","x":"…","y":"…"}` (members in that alphabetical order, no whitespace,
+   only the public members). base64url without padding.
+3. Header `{"alg":"EdDSA"}` (or `ES256`) and the claims as JSON, each base64url (no padding), joined
+   with `.`: that string is the **signing input**.
+4. Sign its UTF-8 bytes: Ed25519 signs them directly; P-256 is ECDSA over their SHA-256. The JWS
+   signature is the raw 64 bytes (P-256: `r || s`, each 32 bytes, **not ASN.1 DER**, which many
+   libraries and KMSs return by default). Append `.` + base64url(signature).
+5. Send `X-Grant-Proof: <jwt>` (no `X-Grant-Token`), the same `Idempotency-Key` you hashed and the exact
+   body bytes.
+6. **Retry** (timeout, `5xx`, lost response): sign a **new** proof with a new `jti`, the same
+   `grant_id` and the same `Idempotency-Key`, and resend the same body. The API returns the stored
+   operation. Never reuse a proof.
+
+```json
+{ "iss": "urn:ietf:params:oauth:jwk-thumbprint:sha-256:NzbL…", "sub": "urn:ietf:params:oauth:jwk-thumbprint:sha-256:NzbL…",
+  "grant_id": "<64 hex>", "aud": "https://api.agentsonintents.com/v1/agents/<agent_id>/transfer",
+  "htm": "POST", "body_sha256": "<64 hex>", "idempotency_key": "idem_7c1f…",
+  "iat": 1790000000, "exp": 1790000060, "jti": "0b1c…16-256 chars" }
+```
+
+Every refusal reads `grant_proof_invalid` (401): bad grant id, signature, key, audience, method,
+body hash, idempotency key, lifetime or format, or a spent `jti`. Malformed path, query, body or
+`Idempotency-Key` values are rejected before the proof is spent; an omitted required
+`Idempotency-Key` is rejected after admission. Language examples: [python.md](python.md#workload-identity),
+[rust.md](rust.md#workload-identity), [other-languages.md](other-languages.md#workload-identity); in TypeScript
+`createGrantProof` / `forGrantProof` ([typescript.md](typescript.md#workload-identity)).
+
 ## Core shapes
 
 ```ts
@@ -242,7 +326,9 @@ BalanceEntry = { asset_id, symbol, decimals, blockchain, price, …, balance_raw
 // of computing it. Deletion previews keep the old shape, without `available`.
 
 GrantView = { grant_id, agent_id, wallet_id, label, issued_at, expires_at,
-              revoked_at, revoked_reason, owner_epoch, owner_message }
+              revoked_at, revoked_reason, owner_epoch,
+              credential_type: "token" | "oidc" | "public_key",
+              owner_message }     // owner_message.credential: a token's SHA-256 hex, or the signed oidc / public_key object
 
 ApprovalView = { approval_id, wallet_id, wallet_pubkey, request_hash,
                  status: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED",

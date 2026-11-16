@@ -29,6 +29,7 @@ assert n.sign_delegate(key, v["near"]["account_id"], d["payload"], nonce, height
 
 assert n.grant_commitment(v["grant"]["token"]) == v["grant"]["commitment"], "grant commitment"
 assert n.GRANT_TOKEN_PATTERN.match(n.create_grant_credential()["token"]), "grant token format"
+assert n.AgentApi("key").for_grant("ngs_" + "A" * 43).grant_token, "ngs_ session token accepted"
 assert n.to_atomic("1.5", 6) == "1500000" and n.to_decimal("1234567", 6) == "1.234567", "amounts"
 
 try:

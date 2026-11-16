@@ -22,14 +22,16 @@ agent account (1 per agent)
 ├── policy        ONE complete, owner-signed rulebook: WHAT may happen
 │   actions, assets, limits, destinations, USD budget, limit-order price bound, timelock, approval, frozen
 └── grants        0..50 live grants: WHO may act
-    each = { grant_id, label, expires_at, sha256(token) }  — token held by the partner
+    each = { grant_id, label, expires_at, credential_type, credential }
+           token: sha256(ngt_ token), held by the partner; oidc / public_key: a workload identity or key
 ```
 
 - **Policy = what.** Shared by every grant. Turning on `withdraw` or adding a destination is one
   owner signature and every grant can use it immediately. There are no per-grant limits; all
   grants draw on the same limits and USD budget.
-- **Grant = who.** A bearer credential (`ngt_…`) for one session, assistant, bot or device.
-  It carries identity and expiry only. Revoke it to cut off that one actor.
+- **Grant = who.** A credential for one session, assistant, bot or device: a bearer token (`ngt_…`), or
+  a federated workload identity or key (`ngs_…` session / `X-Grant-Proof`, for CI and cloud workloads:
+  [workload-identity.md](workload-identity.md)). It carries identity and expiry only. Revoke it to cut off that one actor.
 - **Freeze** stops everyone (policy `frozen: true`) and takes effect at once. It refuses new
   requests; it does not recall a `sign-intent` payload already signed, which stays publishable until
   its deadline ([sign-intent.md](sign-intent.md)). It also makes the API cancel the agent's open limit

@@ -34,6 +34,7 @@ import httpx
 DEFAULT_BASE_URL = "https://api.agentsonintents.com"
 API_KEY_INVALID = re.compile(r"[\s\"']")  # the key is opaque: only reject paste mistakes
 GRANT_TOKEN_PATTERN = re.compile(r"^ngt_[A-Za-z0-9_-]{43}$")
+SESSION_TOKEN_PATTERN = re.compile(r"^ngs_[A-Za-z0-9_-]{43}$")  # from POST .../grants/token (federated grants)
 SETTLEMENT_PATHS = ("/swap", "/limit-orders", "/withdraw", "/transfer", "/shield", "/unshield")
 STILL_MOVING = {"PROCESSING", "QUEUED"}
 
@@ -119,8 +120,10 @@ class AgentApi:
     def __post_init__(self) -> None:
         if not self.api_key or API_KEY_INVALID.search(self.api_key):
             raise ValueError("api_key is empty or has whitespace or quotes")
-        if self.grant_token is not None and not GRANT_TOKEN_PATTERN.match(self.grant_token):
-            raise ValueError("grant_token is not an ngt_ token")
+        if self.grant_token is not None and not (
+            GRANT_TOKEN_PATTERN.match(self.grant_token) or SESSION_TOKEN_PATTERN.match(self.grant_token)
+        ):
+            raise ValueError("grant_token is not an ngt_ or ngs_ token")
         self.base_url = self.base_url.rstrip("/")
         if self._http is None:
             self._http = httpx.Client(follow_redirects=False)
@@ -133,7 +136,8 @@ class AgentApi:
         )
 
     def for_grant(self, grant_token: str) -> "AgentApi":
-        """A client that sends `X-Grant-Token` on delegated calls. One per session/assistant/bot."""
+        """A client that sends `X-Grant-Token` (an `ngt_` grant token or an `ngs_` session token) on delegated
+        calls. One per session/assistant/bot."""
         return AgentApi(self.api_key, self.base_url, grant_token, self.timeout_s, self.settlement_timeout_s, self._http)
 
     # -- transport ---------------------------------------------------------------------------

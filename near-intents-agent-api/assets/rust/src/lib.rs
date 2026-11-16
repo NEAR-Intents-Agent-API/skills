@@ -130,11 +130,12 @@ impl AgentApi {
         Self::new(key, url.as_deref())
     }
 
-    /// A client that sends `X-Grant-Token` on delegated calls. One per session/assistant/bot.
+    /// A client that sends `X-Grant-Token` (an `ngt_` grant token or an `ngs_` session token) on
+    /// delegated calls. One per session/assistant/bot.
     pub fn for_grant(&self, grant_token: impl Into<String>) -> Result<Self> {
         let grant_token = grant_token.into();
-        if !valid_token(&grant_token, "ngt_") {
-            return Err(Error::Invalid("grant_token is not an ngt_ token".into()));
+        if !valid_token(&grant_token, "ngt_") && !valid_token(&grant_token, "ngs_") {
+            return Err(Error::Invalid("grant_token is not an ngt_ or ngs_ token".into()));
         }
         Ok(Self { grant_token: Some(grant_token), ..self.clone() })
     }

@@ -130,7 +130,8 @@ POST /v1/generate-intent
 ```
 
 Owner signs, you submit, status `SUCCESS` returns `details.grant.grant_id`. Store
-`{grant_id, agent_id, encrypted token, label, expires_at}`. See [grants.md](grants.md).
+`{grant_id, agent_id, encrypted token, label, expires_at}`. See [grants.md](grants.md). A CI job or
+cloud workload can use a federated grant instead (no token to store): [workload-identity.md](workload-identity.md).
 
 ## 6. Fund the account
 

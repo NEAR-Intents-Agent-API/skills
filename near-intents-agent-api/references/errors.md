@@ -44,7 +44,7 @@ Every error is a JSON:API document:
 | `layer` | Whose rule | Your move |
 |---|---|---|
 | `request` | the request: shape, ids, assets, addresses, amount minimums, idempotency, resource state | fix the request; repeating it unchanged won't help |
-| `auth` | API key, owner signature, nonce, intent | fix the credential, or regenerate and re-sign the intent |
+| `auth` | API key, owner signature, nonce, intent, a federated grant's subject token or proof | fix the credential, or regenerate and re-sign the intent; for a subject token or proof, get a fresh one |
 | `grant` | the grant that admits the agent's calls | use a live grant's token, or issue one |
 | `policy` | the account policy and its state (actions, assets, destinations, schedule, limits, freeze, archive) | ask the owner (`policy_update`, `agent_unfreeze`), or wait for the schedule/window |
 | `budget` | the shared USD budget and its price | ask the owner to raise a cap, or wait until `resets_at`; for `spend_price_unavailable` wait for a price |
@@ -67,7 +67,7 @@ Every error is a JSON:API document:
 | `rate_limited` | `api` | 429 | wait `Retry-After`, retry the same request. Every attempt counts against its key, refused ones too, so a retry loop keeps its own key limited; only attempts within the key's allowance count against the tenant |
 | `database_busy` | `api` | 503 | retryable; may have taken effect → retry with the **same** idempotency key, never a new one |
 | **Refusals (layer named; only that layer can lift it)** | | | |
-| `agent_grant_required` | `grant` | 403 | missing/revoked/expired/foreign grant → issue a grant or use the right token |
+| `agent_grant_required` | `grant` | 403 | missing/revoked/expired/foreign grant → issue a grant or use the right token. At the exchange: the token verified but no live grant accepts its claims and audience → ask the owner. An `ngs_` session that ended (expiry, revoke) reads like any unknown token: drop the session and exchange afresh on the next call (do not auto-retry the refused call), and if that fails too, ask the owner |
 | `policy_action_denied` | `policy` | 403 | action not in policy, or a stored policy with `confidential` off (shield, deposit) → owner `policy_update` |
 | `policy_transaction_limit_exceeded` | `policy` | 403 | amount above `limits.per_transaction` for the asset it spends (native NEAR and wNEAR share one cap). Plain refusal, nothing recorded → send less, or owner raises it |
 | `policy_destination_denied` | `policy` | 403 | address not allowed → owner adds it to `destinations`. Native NEAR a `native/near/transfer` sends, or a `native/near/call` attaches as deposit, is judged as a `withdraw` on chain `near`; a `solana/sign-transfer` recipient as a `withdraw` on chain `sol`. For `evm|solana/sign-intent` it is judged by `sign_intent` instead: **read `detail`** (unlisted receiver or withdrawal address → owner; a 1Click deposit address paid without its quote, an unsigned, tampered or dry quote, a wrong amount, a refund elsewhere or too much loss → get a fresh live quote, see [sign-intent.md](sign-intent.md)) |
@@ -144,6 +144,13 @@ Every error is a JSON:API document:
 | `grant_limit_reached` | `grant` | 409 | 50 live grants → revoke unused |
 | `grant_credential_reused` | `grant` | 409 | new token per grant |
 | `grant_expiry_invalid` | `grant` | 409 | `expires_at` must be future and ≤365 days |
+| `grant_credential_invalid` | `request` | 400 | `generate-intent` for a federated `grant_issue` (also `submit-intent` if the issuer registry or the API's URL changed since): untrusted issuer without `jwks`, `jwks` for a trusted or vendor-domain issuer, missing required claims, an `audience` for an issuer other than Entra ID (leave it out) or none for Entra, or a weak key. Nothing was signed; read `detail` and `source.pointer`, fix the credential, generate again. Never retry unchanged |
+| `subject_token_invalid` | `auth` | 401 | `POST …/grants/token`: the subject token was refused (signature, issuer, audience, lifetime, format, a claim that no grant pins, or a key assertion already exchanged). The cause is not disclosed. Get a **fresh** identity token for exactly `oidcGrantAudience(baseUrl, agentId)` (the audience the grant names for Entra), or sign a **new** assertion with a new `jti`; never resend the same one. Still refused: the grant's issuer, audience or claims do not match this workload, or the grant is revoked or expired → ask the owner |
+| `grant_proof_invalid` | `auth` | 401 | an `X-Grant-Proof` was refused (grant id, signing key, `aud`, `htm`, `body_sha256`, `idempotency_key`, lifetime, format, or a spent `jti`). Nothing ran. Sign a **new** proof (new `jti`) for the live `public_key` grant and the exact request, keeping the original `grant_id`, `Idempotency-Key` and body bytes. Still refused with every claim right: the grant was revoked or expired (read `GET …/grants`) → ask the owner |
+| `grant_ambiguous` | `grant` | 409 | several live grants with different credentials accept this token → send `grant_id` (SDK `grantId`) from `GET …/grants`; for a renewed credential the longest-lived grant is used |
+| `grant_session_limit_reached` | `grant` | 429 | the grant holds 100 live sessions; nothing opened → exchange again at `meta.available_at` / `Retry-After`, and reuse a session until it nears expiry instead of exchanging per request (one `forGrantSession` client per grant) |
+| `issuer_unavailable` | `api` | 503 | the identity provider's signing keys could not be read, so the token could not be checked; `meta.retryable` → repeat the exchange after `Retry-After` (a token signed by a key just rotated reads this too). Cached keys keep verifying for up to an hour. If it persists, the issuer URL or host is wrong or down: check the grant's `issuer`, report `request_id` |
+| `transparency_unavailable` | `api` | 503 | the audit log could not confirm the exchange, so no session was returned; `meta.retryable` → repeat after `Retry-After` with a live subject token |
 | **Recovery** | | | |
 | `operation_not_recoverable` | `api` | 409 | not UNCERTAIN, already dispatched, non-recoverable kind, or other API key → keep polling |
 | `operation_recovery_unavailable` | `api` | 409 | another recovery running → poll |
@@ -209,6 +216,27 @@ account gets no quote: a swap quote and a withdrawal preview are both refused wi
 6. **Throttles** (429): wait until `available_at` / `Retry-After`.
 7. **Status-level outcomes** (`FAILED`, `REFUNDED`, `UNCERTAIN`, `NEEDS_REVIEW`) are not HTTP
    errors; see [status-and-recovery.md](status-and-recovery.md).
+8. **Grant credentials** (`subject_token_invalid`, `grant_proof_invalid`, `grant_ambiguous`,
+   `grant_session_limit_reached`, `issuer_unavailable`, `grant_credential_invalid`): the exchange
+   takes no `Idempotency-Key` and moves no money, so these are safe to repeat once fixed. Repeat a
+   **proof** call with a new proof but the same `Idempotency-Key`, body and `grant_id` (the original
+   attempt may have been admitted: that key finds it). Never reuse a spent assertion or proof, and
+   never fall back to sending both grant headers (`validation_failed`).
+
+## Workload identity
+
+What an agent does for the federated-grant codes, at a glance:
+
+| Code | Retry? | Do |
+|---|---|---|
+| `subject_token_invalid` | not as is | re-read the platform token (or sign a new assertion), check the audience, then ask the owner if it persists |
+| `grant_proof_invalid` | with a new proof | same key, body and `grant_id`, new `jti`; ask the owner if the grant is gone |
+| `grant_ambiguous` | with `grant_id` | pick it from `GET …/grants` |
+| `grant_session_limit_reached` | at `available_at` | reuse sessions |
+| `issuer_unavailable`, `transparency_unavailable` | yes, `Retry-After` | repeat the exchange |
+| `grant_credential_invalid` | no | fix the credential, generate again |
+
+Never put identity tokens, `ngs_`/`ngt_` tokens or proofs in an error message, log or model context.
 
 ## Wrapping errors in your code
 

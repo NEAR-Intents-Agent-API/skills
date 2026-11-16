@@ -62,8 +62,63 @@ const g = await api.generateIntent({
 });
 // owner signs, submit, wait → status.details.grant.grant_id
 
-const agent = api.forGrant(token);                         // one client per grant
+const agent = api.forGrant(token);                         // one client per grant; takes ngt_ or ngs_
 ```
+
+## Workload identity
+
+A federated grant has no token to store (which kind to pick, the owner's signature, platform recipes,
+KMS signers: [workload-identity.md](workload-identity.md); this section needs SDK 0.9.2 or later). `grant_issue.credential` is a `GrantIssueCredential`: the token commitment,
+`OidcGrantCredential` or `PublicKeyGrantCredential`. Grant views carry `credential_type`
+(`GrantCredentialType`: `token`, `oidc`, `public_key`).
+
+```ts
+import {
+  createWorkloadKey, localJwkSigner, oidcGrantAudience, DEFAULT_BASE_URL,
+  type WorkloadSigner,
+} from "@near-intents-agent-api/sdk";
+
+// OIDC grant. Omit `audience` (only Microsoft Entra ID names it); the API sets it.
+await api.generateIntent({
+  type: "grant_issue", agent_id: agentId, label: "CI deploy (production)",
+  credential: { type: "oidc", issuer: "https://token.actions.githubusercontent.com",
+                claims: { repository_owner_id: "123", repository_id: "456", environment: "production" } },
+  expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+});
+// The workload requests its platform token for this audience, then:
+const audience = oidcGrantAudience(DEFAULT_BASE_URL, agentId);
+const bot = api.forGrantSession(agentId, {
+  subjectToken: () => requestPlatformToken(audience),      // called per exchange: read it fresh
+  // grantId, subjectTokenType, refreshBeforeSeconds (default 60)
+});
+await bot.transfer(agentId, { asset: "nep141:wrap.near", amount: "1", recipient: "bob.near" }, { idempotencyKey });
+
+// Key-bound grant.
+const { privateJwk, publicJwk } = createWorkloadKey("Ed25519");   // or "P-256"; owner signs { type: "public_key", jwk: publicJwk }
+const signer: WorkloadSigner = localJwkSigner(privateJwk);        // or your KMS-backed { publicJwk, sign }
+const viaSession = api.forGrantSession(agentId, { signer });      // signs the exchange assertions itself
+const viaProof = api.forGrantProof({ grantId, signer });          // X-Grant-Proof per request; grantId from grant_issue / listGrants
+```
+
+- `api.exchangeGrantToken(agentId, { subject_token, subject_token_type?, grant_id? }, options?)` returns
+  `GrantTokenExchangeResponse` (`access_token` `ngs_…`, `expires_in`, `expires_at`, `grant_id`, `label`).
+  `forGrantSession` calls it lazily, caches the session and shares one exchange between concurrent
+  calls. From `refreshBeforeSeconds` (default 60, at most half the session's life) before the end it
+  renews in the background while the current token keeps serving until 5 s before the end; a failed
+  exchange is not repeated for 5 s; a delegated call refused with `agent_grant_required` throws, is
+  not repeated, and drops the session so the next call exchanges again; call it directly only if you manage sessions yourself, then
+  `api.forGrant(access_token)`.
+- `forGrantProof` signs every delegated attempt with a new proof; a retry keeps the same
+  `idempotencyKey`. A client sends a token **or** a proof, never both. Keep one client per grant.
+- `WorkloadSigner = { publicJwk, sign(signingInput: Uint8Array): Uint8Array | Promise<Uint8Array> }`;
+  `sign` returns the raw 64-byte JWS signature (P-256: `r || s`, **not** a KMS's DER; the SDK throws
+  otherwise). A signer runs once per proof or exchange: with a billed KMS prefer `forGrantSession`.
+- Hand-rolled flows: `jwkThumbprintUri(publicJwk)`, `createKeyAssertion(signer, { baseUrl, agentId })`
+  (single use, for `subject_token`), `createGrantProof(signer, { grantId, method, url, body?, idempotencyKey? })`
+  (types `GrantProofRequest`, `GrantSessionOptions`, `SubjectTokenType`, `WorkloadKey`, `WorkloadPrivateJwk`).
+- `baseUrl` must be the URL the API publishes as `servers[0]`: audiences and proofs are built from it.
+- Errors: `subject_token_invalid`, `grant_proof_invalid`, `grant_ambiguous`, `grant_session_limit_reached`,
+  `issuer_unavailable`, `grant_credential_invalid` ([errors.md](errors.md#workload-identity)).
 
 ## Executions
 

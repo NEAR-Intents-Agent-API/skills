@@ -21,7 +21,8 @@ TypeScript, Python, Rust, Go or anything that speaks HTTP.
 ```
  your backend (partner)            end user (owner)                  AI agent
  ─────────────────────            ────────────────                  ────────
- partner API key                   wallet: NEAR / EVM / passkey      ngt_ grant token (held by your backend)
+ partner API key                   wallet: NEAR / EVM / passkey      ngt_ grant token (held by your backend),
+                                                                       or a federated identity (no long-lived secret)
  prepares owner actions   ──────►  signs: create account, policy,
  stores grant tokens               grants, freeze, approve, delete
  calls executions         ◄─────────────────────────────────────────  swap / limit order / transfer / withdraw / deposit
@@ -106,7 +107,8 @@ near-intents-agent-api/
 │   ├── signing.md               nep413 / nep366 / eip712 / webauthn byte formats, per language
 │   ├── policy.md                every policy field, ready-made policies, cooldowns
 │   ├── sign-intent.md           sign-intent / sign-in / sign-transfer with the agent's EVM and Solana keys
-│   ├── grants.md                tokens, commitments, storage, revocation, patterns
+│   ├── grants.md                credential kinds, tokens, commitments, storage, revocation, patterns
+│   ├── workload-identity.md     federated grants: OIDC platforms, key-bound grants, exchange, X-Grant-Proof, KMS
 │   ├── executions.md            swap, withdraw, transfer, shield, deposit, quotes, chains
 │   ├── limit-orders.md          resting limit orders: place, follow, cancel, price bound, containment
 │   ├── status-and-recovery.md   statuses, polling, idempotency, UNCERTAIN, /recover

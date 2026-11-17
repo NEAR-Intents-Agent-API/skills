@@ -102,7 +102,8 @@ Every error is a JSON:API document:
 | `limit_orders_open` | `api` | 409 | `agent_delete`: an order is not payout-final yet; checked before `deletion_assets_remaining`, and a fill or refund would land in a deleted account → cancel the orders (or freeze, which cancels them), wait until each `is_payout_status_final`, then delete (see [limit-orders.md](limit-orders.md)) |
 | `custody_native_balance_required` | `balance` | 409 | the agent's own NEAR account holds less NEAR than the call costs; nothing sent. `meta.available_amount` (held) and `meta.min_amount` (cost) are in yoctoNEAR → fund that account, then a **new** key |
 | `route_unavailable` | `provider` | 409 (400 on deposit) | no route or liquidity for this pair or amount; nothing submitted. Repeating the request won't help → try a different amount or pair under a new key |
-| `unsupported_chain`, `unsupported_token`, `invalid_address` | `request` | 400/409 | change chain/asset/address. `invalid_address`: the recipient is not a valid address for the chain (refused before the policy is read), the provider refused it, a `transfer` recipient is a named NEAR account that does not exist, or (409) a token withdrawal goes to a NEAR account with no storage on that token's contract (a preview too: register its storage, or move the funds inside NEAR Intents). Nothing was sent |
+| `unsupported_chain`, `unsupported_token`, `invalid_address` | `request` | 400/409 | change chain/asset/address. `invalid_address`: the recipient is not a valid address for the chain (refused before the policy is read) or the account does not exist (a named NEAR recipient the API checks answers 400; a provider refusal answers 409). Nothing was sent |
+| `recipient_storage_unregistered` | `request` | 409 | a withdrawal (or its preview) of a token to a NEAR account with no storage registered on that token's contract (NEP-141 `storage_deposit`); the transfer cannot land. Not retryable; nothing sent → register the recipient's storage on that token contract, then send again under a **new** key (or move the funds inside NEAR Intents). Not `invalid_address`, which now means only an invalid address or a missing account |
 | `near_rpc_unavailable` | `api` | 503 | `transfer` only: NEAR RPC did not answer, so a named recipient could not be checked; retryable, nothing sent → retry the same request (same key) shortly |
 | `wallet_busy` | `provider` | 409 | another money op on this wallet is running; nothing sent, refusal recorded (not retryable) → after it finishes, a **new** key |
 | `spend_price_unavailable` | `budget` | 503 | no fresh USD price for budget accounting. Plain refusal, nothing recorded → send again once `GET /v1/tokens` shows a price |
@@ -180,7 +181,8 @@ whose `code` is the live code: `policy_action_denied`, `policy_destination_denie
 and the same layer to change. Such a code in `warnings` means the live request will be refused with
 it: tell the user, reduce the amount, wait, or ask the owner to change the policy. An asset
 `GET /v1/tokens` does not list (`unsupported_token`) or an invalid recipient (`invalid_address`)
-refuses the quote itself with 400, before any provider call. A
+refuses the quote itself with 400, before any provider call; a recipient with no storage on the
+token's contract is refused `recipient_storage_unregistered` (409). A
 withdrawal preview that reaches the provider counts toward the wallet's 1,000 custody
 operations per rolling 24 h, rule warning or not. An archived, deleted or frozen
 account gets no quote: a swap quote and a withdrawal preview are both refused with 409

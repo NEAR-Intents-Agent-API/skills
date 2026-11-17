@@ -179,7 +179,9 @@ without an amount limit; `sign_in` signs a login for a listed domain only.
 with that `correlation_id` before `execute_after`.
 
 **Approve a payment** (policy `owner_approval: true`, any owner type): list `GET …/approvals`, show
-`request_data`, then `approval_vote` with `verdict`. At most 100 requests per agent wait at once:
+`request_data`, then `approval_vote` with `verdict`. Each approval's `votes` lists the owner votes
+submitted through this API (`{ voter, verdict, voted_at }`, oldest first, `voter` = the owner's principal id,
+`[]` when none); a vote cast directly at the provider is not listed. At most 100 requests per agent wait at once:
 the next is refused with `approval_backlog_full` (409, nothing sent) until the owner votes on one. The execution moves out of
 `PENDING_APPROVAL`; keep polling its `op_…` id. `reject` ends it and releases its budget
 charge (`FAILED`, `details.never_executed`). `approve` re-runs the admission checks first: a

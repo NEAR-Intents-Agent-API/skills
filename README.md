@@ -111,7 +111,7 @@ near-intents-agent-api/
 │   ├── workload-identity.md     federated grants: OIDC platforms, key-bound grants, exchange, X-Grant-Proof, KMS
 │   ├── executions.md            swap, withdraw, transfer, shield, deposit, quotes, chains
 │   ├── limit-orders.md          resting limit orders: place, follow, cancel, price bound, containment
-│   ├── status-and-recovery.md   statuses, polling, idempotency, UNCERTAIN, /recover
+│   ├── status-and-recovery.md   statuses, polling, idempotency, lookup by key, UNCERTAIN, /recover
 │   ├── errors.md                every error code and what to do
 │   ├── architecture.md          data model, jobs, key ownership models, AI tools, security checklist
 │   ├── examples.md              map of the runnable TypeScript examples

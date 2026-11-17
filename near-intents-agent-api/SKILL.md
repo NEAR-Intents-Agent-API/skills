@@ -36,7 +36,10 @@ Follow these in every integration; most bugs and lost-fund incidents come from b
    and `asset_id` from `GET /v1/tokens`. Never use floats. Amounts that move funds must be > 0.
 4. **Every money-moving call carries an `Idempotency-Key`** (8–128 chars `[A-Za-z0-9._:-]`).
    Create it, persist it with the request, *then* send. Retry only with the same key and body.
-   A live `placeLimitOrder` carries one; cancelling an order needs the grant only.
+   A live `placeLimitOrder` carries one; cancelling an order needs the grant only. If the response is
+   lost and the `correlation_id` was not stored, read it back with
+   `GET /v1/agents/{agent_id}/operations?idempotency_key=<key>` (API key only, no replay); empty lists
+   are inconclusive, only a same-key, same-body replay under the original grant settles it.
 5. **`UNCERTAIN` means the outcome is not yet proven ("maybe executed").** Keep polling the original `correlation_id`. Never
    resubmit with a new key; `/recover` is only for provably-undispatched operations. An
    execution the provider may have received answers `202 UNCERTAIN`. A server failure
@@ -157,7 +160,7 @@ The Python and Rust signers are verified byte-for-byte against near-api-js and v
 | Give a CI job, cloud workload or key-holding server a grant with no long-lived secret (GitHub Actions, GitLab, GCP, AWS, Kubernetes, Entra, Vercel, KMS; exchange, `X-Grant-Proof`) | [references/workload-identity.md](references/workload-identity.md) |
 | Swap, transfer, withdraw, deposit, shield, quotes, chains, `reference` / `note`, receipts | [references/executions.md](references/executions.md) |
 | Place, follow and cancel limit orders (resting orders, price bound, containment, delete guard) | [references/limit-orders.md](references/limit-orders.md) |
-| Statuses, polling, idempotency, `UNCERTAIN`, `/recover`, operation proofs, verifying receipts | [references/status-and-recovery.md](references/status-and-recovery.md) |
+| Statuses, polling, idempotency, finding an operation by its key after a lost response, `UNCERTAIN`, `/recover`, operation proofs, verifying receipts | [references/status-and-recovery.md](references/status-and-recovery.md) |
 | Sign NEAR Intents payloads, Solana logins or transfers with the agent's EVM/Solana key (`sign-intent`, `sign-in`, `sign-transfer`) | [references/sign-intent.md](references/sign-intent.md) |
 | Handle an error code | [references/errors.md](references/errors.md) |
 | Design the integration (data model, AI tools, key ownership models, security) | [references/architecture.md](references/architecture.md) |

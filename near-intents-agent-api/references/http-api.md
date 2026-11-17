@@ -65,6 +65,7 @@ Details: [owner-intents.md](owner-intents.md), signing: [signing.md](signing.md)
 |---|---|---|---|
 | `GET /v1/status` | key | `correlation_id`, `wait_ms` (0–30000), `refresh` (bool) | `StatusResponse` |
 | `GET /v1/agents/{agent_id}/history` | key | `cursor`, `limit` (1–100, default 25), `include_unpaid` (bool, default false) | page of `StatusResponse` |
+| `GET /v1/agents/{agent_id}/operations` | key | `idempotency_key` (required, 8–128 chars `[A-Za-z0-9._:-]`) | `{ data: StatusResponse[], retired: string[] }`: the operations that key admitted, newest first, no provider call. See [status-and-recovery.md](status-and-recovery.md#lost-the-response-look-the-key-up) |
 | `GET /v1/agents/{agent_id}/operations/{correlation_id}/proof` | key | path `correlation_id` is an `op_…` id; `from_size?` (the size of your trusted checkpoint, decimal string: adds a consistency path; a server behind it answers 409 `transparency_checkpoint_behind`) | `{ correlation_id, origin, checkpoint, consistency, notary, events }`: each audit event of the execution with a `c2sp.org/tlog-proof@v1` (`PROVEN`) and its `evidence` (the recorded result, hashed into the opening), `PENDING` until the next checkpoint, or `UNLOGGED`; `notary` holds the verifier keys and TDX birth attestation. A deployment without a transparency log answers 501 `transparency_log_disabled` |
 
 ### Receipts

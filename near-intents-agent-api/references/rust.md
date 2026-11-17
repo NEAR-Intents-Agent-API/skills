@@ -30,7 +30,9 @@ let balances = api.get_balances(&agent_id, "confidential").await?;   // "public"
 ```
 
 Bodies and responses are `serde_json::Value`. For anything without a helper use
-`api.request(Method, path, query, body, idempotency_key, grant)`. Generate typed models from
+`api.request(Method, path, query, body, idempotency_key, grant)`; a lost request is looked up by its key with
+`api.request(Method::GET, &format!("/v1/agents/{agent_id}/operations"), &[("idempotency_key", key.to_string())], None, None, false)`
+(a read: no `idempotency_key` argument). Generate typed models from
 `/openapi.json` (e.g. `openapi-generator -g rust` or `progenitor`) if you want structs; keep
 `intent.payload` as `Value` either way so you never re-order it.
 

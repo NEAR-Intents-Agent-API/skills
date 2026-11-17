@@ -87,12 +87,52 @@ def settle(api, cid, deadline_s=300):
 - After a definitive refusal or `FAILED`, a retry is a new request → new key.
 - SDK/assets return the key they used (`result.idempotencyKey`, `AgentApiRequestError.idempotencyKey`)
   so you can retry with it after a transport error.
+- Lost the response and never stored the `correlation_id`? Read it back with the key
+  ([below](#lost-the-response-look-the-key-up)) before you send anything again.
+
+## Lost the response: look the key up
+
+`GET /v1/agents/{agent_id}/operations?idempotency_key=<key>` (API key only, no grant) recovers the
+`correlation_id` of a request whose response never reached you, **without replaying it**. It is a read:
+nothing is dispatched, no provider call is made, nothing is spent.
+
+```http
+GET /v1/agents/{agent_id}/operations?idempotency_key=withdraw-9f2c1a
+X-API-Key: <partner API key>
+→ 200 { "data": [ StatusResponse, … ], "retired": [ "op_…" ] }
+```
+
+- `idempotency_key` is required, 8–128 chars `[A-Za-z0-9._:-]` (anything else is a 400).
+- `data`: the retained operations the key admitted, **newest first**, shaped like `GET …/history`
+  entries and not reconciled with the provider (to settle one, `GET /v1/status` with its id).
+  `details.request` carries the admitted terms (asset, amount, recipient) when they were recorded;
+  older operations lack them.
+- `retired`: ids whose detail was removed after retention (90 days after the last update by default).
+  Only the permanent admission record remains: the key was admitted and **stays spent**, so it never
+  runs again, but the API can no longer tell you the outcome.
+- Keys are scoped to the grant: the same key under two grants names two operations, and both come
+  back. Revoked and expired grants are searched too, and so is the grant-free scope (deposits).
+- It covers requests that consumed a key at admission (executions, deposit-address allocations,
+  native NEAR transfers and calls). A dry preview creates no operation, so there is nothing to find.
+  An owner intent is read by its own `intent_…` id. Native signing routes take no key: find them in history.
+- **Empty lists prove nothing.** The request may still be in admission, may have been refused before
+  anything was recorded, or its original grant may no longer be known. Only a replay settles it: the
+  **same key and the same body, under the original grant, while that grant can still authorize the
+  request**. A replacement grant is another scope and can admit a second operation, and if the
+  original grant can no longer authorize it the replay may leave the outcome unresolved.
+- A key you did not keep cannot be recovered (the API does not store keys): persist it before sending.
+
+```ts
+const { data, retired } = await api.lookupOperations(agentId, idempotencyKey);   // SDK 0.9.3+
+const found = data[0]?.correlation_id;       // then getStatus(found, { waitMs: 30_000 })
+```
 
 ## UNCERTAIN
 
 The API lost the provider's answer around dispatch, so it cannot prove whether the money moved.
 
-1. Keep polling the same `correlation_id`. The API reconciles via the provider's records.
+1. Keep polling the same `correlation_id`. The API reconciles via the provider's records. If you
+   never stored it, [look the key up](#lost-the-response-look-the-key-up).
 2. Never resubmit under a new idempotency key — that can pay twice.
 3. If it stays `UNCERTAIN`, look at the operation:
    - has `provider_request_id` or `dispatch_committed_at` → **the provider got it**. Only

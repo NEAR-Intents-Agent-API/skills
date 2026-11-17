@@ -32,7 +32,8 @@ headers:   X-API-Key, Content-Type: application/json, Accept: application/json
              (a live limit order too; not on cancels or limit-order previews)
 success:   2xx JSON
 error:     ≥400 JSON:API → raise {status, code=errors[0].code, detail, retryable, available_at, request_id, idempotency_key}
-transport: raise with the idempotency key so the caller can retry with it
+transport: raise with the idempotency key so the caller can retry with it, or read the operation back with
+           GET /v1/agents/{id}/operations?idempotency_key=<key> (a read, no replay)
 ```
 
 ## Go example

@@ -326,4 +326,6 @@ generic error.
 A malformed policy returns `400 validation_failed` with one error per field
 (`source.pointer` like `/policy/destinations/list/0/address`). Other policy-related codes:
 `policy_revision_conflict`, `policy_reconciliation_required`,
-`policy_blocks_delete` (an old-shape policy must be re-signed before deletion).
+`policy_blocks_delete` (an old-shape policy must be re-signed before deletion), `policy_too_large`
+(400: the encrypted policy is over 15,360 bytes and cannot be recorded in one write; refused at
+generate-intent, before the owner signs. Allow fewer assets, per-asset limits or contracts).

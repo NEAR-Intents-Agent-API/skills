@@ -178,8 +178,22 @@ Types: `LimitOrderRequest`, `LimitOrderView`, `LimitOrderPage`, `CancelLimitOrde
 `getPolicy`, `getPolicyHistory`, `listGrants`, `listScheduledExecutions`, `getContainment`,
 `listApprovals`, `getApproval`, `listLimitOrders`, `getLimitOrder`, `getAddress(id, "near")`, `listProviderRecords(id, kind)`,
 `getHistory(id, { cursor, limit, include_unpaid })`, `getStatus(cid, { waitMs, refresh })`,
+`lookupOperations(id, idempotencyKey, options?)` (SDK 0.9.3),
 `getOperationProof(id, cid)`, `getReceipt(id, cid)`, `listReceipts(id, { type, limit, cursor })`.
 `listApprovals` returns the array (at most 100) and drops the listing's `truncated` flag (SDK 0.9.1).
+
+`lookupOperations` answers `{ data, retired }` for a request whose response was lost: `data` is the
+retained operations the key admitted (newest first, as `getHistory` entries), `retired` the ids whose
+detail was purged after retention (the key stays spent). Both empty is inconclusive; only a same-key,
+same-body replay under the original grant settles it
+([status-and-recovery.md](status-and-recovery.md#lost-the-response-look-the-key-up)). It needs
+SDK 0.9.3 or later (`npm i @near-intents-agent-api/sdk@^0.9.3`), which also types `ApprovalView.votes` and
+the `recipient_storage_unregistered` code:
+
+```ts
+const { data, retired } = await api.lookupOperations(agentId, idempotencyKey);
+if (data.length) await api.getStatus(data[0].correlation_id, { waitMs: 30_000 });   // newest first
+```
 
 ## Native accounts
 

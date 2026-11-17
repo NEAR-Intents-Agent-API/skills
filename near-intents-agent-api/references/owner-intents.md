@@ -142,6 +142,8 @@ Adapt to your wallet library's result shape (near-connect / wallet-selector retu
 | `limit_orders_open` (409) | `agent_delete`: a limit order is not payout-final yet → cancel or let it settle, then delete again |
 | `deletion_assets_remaining` (409) | `agent_delete`: the wallet still holds a public or confidential balance → withdraw it (a public one with `confidential: false`), then delete again |
 | `policy_revision_conflict` (409) | re-read `GET …/policy`, regenerate with its `revision`, re-sign |
+| `policy_too_large` (400) | the policy is too big for the custody contract to log in one write (encrypted form over 15,360 bytes); refused at generate-intent, before anyone signs → allow fewer assets, per-asset limits or contracts, generate again |
+| `provider_unavailable` / `provider_policy_unavailable` (503) | an on-chain change reads the wallet's freeze state from the chain: unreachable chain is `provider_unavailable` (retryable, same request after `Retry-After`), a missing policy record `provider_policy_unavailable`; nothing sent |
 | `policy_reconciliation_required` | another policy intent is still open → wait for it to settle/expire |
 | `policy_change_throttled` / `agent_unfreeze_throttled` (429) | wait until `meta.available_at` (also on `GET /v1/agents/{id}` cooldowns) |
 | `wallet_already_frozen` / `wallet_already_unfrozen` | already in that state |

@@ -110,7 +110,7 @@ Every error is a JSON:API document:
 | `authorization_stale` | `auth` | 409 | grant/key revoked or policy/owner changed between admission and dispatch → re-evaluate. A request held for owner approval whose authority lapsed settles `FAILED` with it (`details.never_executed`, charge released); a later approve vote is refused with it |
 | `deposit_quota_exceeded` | `api` | 429 | 100 deposit addresses / 24 h for this agent → wait `available_at` |
 | **Provider (wallet service/1Click) state** | | | |
-| `provider_unavailable` | `provider` | 503 | the provider or the quote service behind it did not answer → read `/v1/network` (`one_click`). With `meta.retryable`: same request, same key, after `Retry-After`. Without it the refusal is recorded (nothing submitted): new key once the provider is ok |
+| `provider_unavailable` | `provider` | 503 | the provider or the quote service behind it did not answer → read `/v1/network` (`one_click`). With `meta.retryable`: same request, same key, after `Retry-After`. Without it the refusal is recorded (nothing submitted): new key once the provider is ok. Generating an on-chain policy change returns it (retryable) when the chain cannot be reached to read the wallet's freeze state |
 | `provider_limit_reached` | `provider` | 429 | custody provider's daily quota for this wallet: 1,000 operations / rolling 24 h, `dry` previews included, quotes not; nothing sent → new work at `available_at` (don't burn the quota on repeated previews) |
 | `provider_rate_limited` | `provider` | 429 | a provider's rate limiter refused before running; nothing sent; always `Retry-After: 10`. With `meta.retryable` (reads, and calls that took a key): same request, same key, after it. Without it the refusal is recorded → new key after the wait |
 | `provider_refused` | `provider` | 409 (400 on a deposit quote) | the provider refused these terms; on a quote `detail` quotes 1Click's reason. Nothing sent or charged, repeating won't help → change the request, new key |
@@ -126,6 +126,8 @@ Every error is a JSON:API document:
 | `deletion_assets_remaining` | `balance` | 409 | `agent_delete`: the wallet holds a public or confidential balance, including funds that arrived since the owner signed (the API reads the balances again right before committing; an unreadable balance there is `provider_unavailable`). Nothing was retired; a failure at that final read is recorded `failed` and the agent stays archived and restorable → withdraw the funds, then delete again |
 | `intent_generation_recovery_required` | `api` | 409 | retry `generate-intent` with the same idempotency key |
 | `policy_revision_conflict` | `policy` | 409 | re-read policy, regenerate with new `expected_revision`, re-sign |
+| `policy_too_large` | `policy` | 400 | the policy's encrypted form is over 15,360 bytes, more than the custody contract can log in one write. Refused at generate-intent, before the owner signs; nothing sent → allow fewer assets, per-asset limits or contracts, generate again. Repeating it unchanged won't help |
+| `provider_policy_unavailable` | `provider` | 503 | an on-chain policy change could not read the wallet's policy record from the chain, or the chain holds none; nothing sent → try again later (see `provider_unavailable` for an unreachable chain) |
 | `policy_reconciliation_required` | `policy` | 409 | another policy intent still open → wait |
 | `policy_change_throttled`, `agent_unfreeze_throttled` | `policy` | 429 | cooldown → wait `available_at` |
 | `wallet_already_frozen`, `wallet_already_unfrozen` | `request` | 409 | no-op; state already as requested |
@@ -199,7 +201,9 @@ account gets no quote: a swap quote and a withdrawal preview are both refused wi
    `provider` + `meta.retryable` → same key, later.
 3. **Server failures** (`internal_error` 500, `database_busy` 503, `transaction_unconfirmed` 503,
    all with `meta.retryable`): the request may have taken effect. Repeat it with the **same** key,
-   which replays or reconciles it, or read status. Never a new key: that can spend twice.
+   which replays or reconciles it, or read status. If you lost the response before storing the
+   `correlation_id`, [look the key up](status-and-recovery.md#lost-the-response-look-the-key-up).
+   Never a new key: that can spend twice.
 4. **Proven refusals** (`public_balance_exit_only`, `route_unavailable`, `wallet_busy`, a recorded `provider_unavailable`, and
    the policy/grant/validation refusals in the decision table): nothing was sent. A refusal
    recorded as an operation's outcome replays under its key, so a later attempt is a new request →

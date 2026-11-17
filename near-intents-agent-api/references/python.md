@@ -30,7 +30,9 @@ Methods: `generate_intent`, `submit_intent`, `get_status(cid, wait_ms, refresh)`
 `get_containment`, `quote_swap`, `quote_withdraw`, `swap`, `withdraw`, `transfer`, `shield`,
 `unshield` (always refused), `deposit`, `recover`, the limit-order methods (`quote_limit_order`, `place_limit_order`,
 `list_limit_orders`, `get_limit_order`, `cancel_limit_order`, `cancel_all_limit_orders`), plus the generic `request(method, path, query=, body=, idempotency_key=, grant=)`
-for anything else. Responses are plain dicts with the API's snake_case fields.
+for anything else, such as the lookup of a lost request by its key:
+`api.request("GET", f"/v1/agents/{agent_id}/operations", query={"idempotency_key": key})` → `{"data": [...], "retired": [...]}`
+(a read: pass no `idempotency_key=`). Responses are plain dicts with the API's snake_case fields.
 
 Helpers: `create_idempotency_key()`, `create_grant_credential()` → `{token, commitment}`,
 `grant_commitment(token)`, `to_atomic("1.5", 24)`, `to_decimal(raw, decimals)`,

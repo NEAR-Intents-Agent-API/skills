@@ -166,10 +166,11 @@ one is covered in [limit-orders.md](limit-orders.md).
   registration needed, and what exchanges and invoices expect. A confidential one is paid out by
   1Click, which unwraps it. There is no option to withdraw wNEAR to chain `near`.
 - `unsupported_chain` means a chain the catalog doesn't list; `route_unavailable` means no
-  liquidity for that asset now; `invalid_address` when the address is not valid for the chain or the provider rejects it
-  (a malformed one is refused before the policy is read). A token withdrawal to a NEAR account with no
-  storage on that token's contract is `invalid_address` with status 409, a preview too: register the
-  receiver's storage first (NEP-145 `storage_deposit`), or move the funds inside NEAR Intents.
+  liquidity for that asset now; `invalid_address` when the address is not valid for the chain or the account does not
+  exist (a malformed one is refused before the policy is read). A token withdrawal to a NEAR account with no
+  storage on that token's contract is `recipient_storage_unregistered` (409, not retryable), a preview too:
+  register the receiver's storage on that token contract first (NEP-145 `storage_deposit`) and send again
+  under a new key, or move the funds inside NEAR Intents.
 - Moving funds to your own account on another chain or venue (your Hyperliquid or Polymarket
   address, say) counts against the USD budget like any withdrawal, and a deposit back does not
   credit it.

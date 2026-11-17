@@ -332,7 +332,11 @@ GrantView = { grant_id, agent_id, wallet_id, label, issued_at, expires_at,
 
 ApprovalView = { approval_id, wallet_id, wallet_pubkey, request_hash,
                  status: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED",
-                 request_type, request_data, required_approvals, expires_at }
+                 request_type, request_data, required_approvals, expires_at,
+                 votes: [{ voter, verdict: "approve" | "reject", voted_at }] }
+                 // votes: owner votes submitted through this API, oldest first, [] when none; voter is the
+                 // owner's principal id (near:<account>:<public_key>, evm:<account>, passkey:<account>).
+                 // A vote cast directly at the provider is not listed.
 
 OwnerWallet =
   | { type: "near", account_id, public_key: "ed25519:…" }

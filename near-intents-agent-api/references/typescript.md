@@ -130,7 +130,7 @@ const quote = await agent.swap(agentId, {
 // would fail under its code (spend_budget_exceeded, policy_schedule_denied + available_at,
 // insufficient_balance + available_amount, …). Check it before the real swap.
 // An unlisted asset or an invalid recipient throws unsupported_token or invalid_address (400), before any provider call.
-// A token withdrawal to a NEAR account with no storage on that token is invalid_address (409), a preview too.
+// A token withdrawal to a NEAR account with no storage on that token throws recipient_storage_unregistered (409), a preview too.
 // A frozen, archived or deleted account gets no quote: it throws wallet_frozen, agent_archived or agent_deleted.
 // withdraw(…, { dry: true }) is the same shape but needs the grant and a key; a preview that reaches the
 // provider counts toward the wallet's 1,000 custody operations per rolling 24 h (swap quotes do not).

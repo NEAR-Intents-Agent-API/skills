@@ -34,7 +34,7 @@ dedicated low-value owner account.
 | `05:withdraw` | `05-money-moves/03-withdraw.ts` | dry withdraw, withdraw |
 | `05:deposit` | `05-money-moves/04-deposit.ts` | deposit address, min amount, memo, expiry |
 | `05:private-balance` | `05-money-moves/05-private-balance.ts` | shield (unshield is refused with `public_balance_exit_only`) |
-| `05:approvals` | `05-money-moves/06-approvals.ts` | `owner_approval`, approval list, `approval_vote` |
+| `05:approvals` | `05-money-moves/06-approvals.ts` | `owner_approval`, approval list, `approval_vote` (`reject` argument rejects; signs again on `repeat_required`) |
 | `06:edit-policy` | `06-policy-and-lifecycle/01-edit-policy.ts` | read → modify → sign complete policy |
 | `06:freeze` | `06-policy-and-lifecycle/02-freeze-and-unfreeze.ts` | emergency stop, cooldown-aware |
 | `06:archive-and-delete` | `06-policy-and-lifecycle/03-archive-and-delete.ts` | archive, restore, delete preview |

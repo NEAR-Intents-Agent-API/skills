@@ -140,7 +140,7 @@ Every error is a JSON:API document:
 | `transaction_unconfirmed` | `api` | 503 | retryable; broadcast but unconfirmed → poll status, or repeat with the **same** key (never sends twice); never as new work |
 | `execution_not_cancellable` | `request` | 409 | op already left `QUEUED` |
 | `approval_closed`, `approval_already_voted`, `approval_not_allowed` | `request`/`auth` | 409 | read the approval's current state. A held approval that lapsed settles `FAILED` with `authorization_stale` or `expired` (`details.never_executed`, charge released); voting on it is `approval_closed` |
-| `approval_not_recorded` | `request` | 409 | an approve vote for a request the API has no record of yet (settlement has not observed it); consumes nothing → send the same signed vote again in a few minutes. A reject needs no record |
+| `approval_not_recorded` | `request` | 409 | an approve vote for a request the API has no record of yet (settlement has not observed it); consumes nothing → send the same signed vote again in a few minutes. A reject needs no record (a reject whose vote status has `details.repeat_required: true` is still pending: sign another) |
 | `approval_signature_invalid` | `auth` | 401 | the vote was not signed by the owner's key or wallet → regenerate and sign again |
 | `approval_vote_unsupported` | `provider` | 409 | the provider lists no such owner wallet build on this network → ask the operator; nothing was stored |
 | **Grants** | | | |

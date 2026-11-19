@@ -292,7 +292,7 @@ reads `PROCESSING`, with `details.provider_status` keeping the provider's own st
 | `grant_revoke` | `grant_id`, `committed_correlation_ids`, `committed_cancellations` (`[{ order_id \| null, committed_at }]`, limit-order cancels that may still reach the provider), `committed_truncated` |
 | `execution_cancel` | `cancelled_correlation_id` |
 | `agent_archive`, `agent_restore` | `archived` |
-| `approval_vote` | `approval_id`, `verdict` |
+| `approval_vote` | `approval_id`, `verdict`, `repeat_required` (`true`: the reject was recorded but the request is still pending, so generate and sign another reject for the same approval; `null`: not known yet; `false`: nothing more to do), `confirmation?` (`"cancellation_observed"`: a fresh reject lost its reply and the API observed the earlier reject take effect) |
 | `native` | `method`, `chain`, `account_id`, `target`, `amount`, `method_name`, `primary_type`, `domain`, `message_json`, `request_sha256`, `signature` (always `null` here), `tx_hash`, `provider_request_id`, `provider_status`, `failure_reason`. `domain` (the matched EIP-712 domain, in the policy's spelling) and `message_json` (the signed `message` as canonical JSON, keys sorted, a string) are set for typed data, `null` otherwise |
 
 Narrow on `type` before reading `details`.

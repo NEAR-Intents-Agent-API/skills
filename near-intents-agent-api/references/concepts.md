@@ -103,7 +103,9 @@ Both return a `correlation_id`; `GET /v1/status?correlation_id=` reads either.
 2. **Wait** — `timelock_ms > 0` → `QUEUED` until `execute_after` (owner may `execution_cancel`).
    `owner_approval` → `PENDING_APPROVAL` until the owner's `approval_vote`. An `approve`
    re-runs step 1 (grant live, not frozen, destination allowed; not the schedule) before the
-   release and refuses the vote when it fails; a `reject` releases the budget charge. A release
+   release and refuses the vote when it fails; a `reject` releases the budget charge, but one cast within a block or two of a policy change
+   can leave the request pending: if the vote's `details.repeat_required` is `true`, sign another
+   `reject`. A release
    outside the `schedule` fails the operation; nothing is sent. A limit order's price is judged
    again at each release, a timelock's or an owner approval's. If the market price is briefly
    unavailable when a timelocked order is released, the API retries it later instead of failing it.

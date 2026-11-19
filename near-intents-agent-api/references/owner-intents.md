@@ -186,7 +186,14 @@ submitted through this API (`{ voter, verdict, voted_at }`, oldest first, `voter
 `[]` when none); a vote cast directly at the provider is not listed. At most 100 requests per agent wait at once:
 the next is refused with `approval_backlog_full` (409, nothing sent) until the owner votes on one. The execution moves out of
 `PENDING_APPROVAL`; keep polling its `op_…` id. `reject` ends it and releases its budget
-charge (`FAILED`, `details.never_executed`). `approve` re-runs the admission checks first: a
+charge (`FAILED`, `details.never_executed`). A `reject` cast within a block or two of a policy
+change can be stored by the provider without cancelling the request. The API resends the owner's
+signed reject for a few seconds. If the vote's status then has `details.repeat_required: true`, the
+request is still pending: generate the `approval_vote` intent again and have the owner sign another
+`reject` for the same approval. `repeat_required` is `null` while the vote is not applied yet and
+`false` when nothing more is needed. `details.confirmation: "cancellation_observed"` means a fresh
+reject lost its reply and the API observed the cancellation from the earlier receipt, so the reject
+took effect. Approves are unaffected. `approve` re-runs the admission checks first: a
 revoked or expired grant, a frozen or changed policy, or a destination no longer allowed refuses
 the vote (`authorization_stale`, `wallet_frozen`, `policy_destination_denied`), nothing is
 sent, and the request stays held for a `reject` while the refusal can still clear (a frozen

@@ -35,6 +35,20 @@ finalized failure is `FAILED` (`native_transaction_failed`); a transaction that 
 `NEEDS_REVIEW` (`native_transaction_mismatch`); one NEAR still does not know 30 minutes after dispatch
 is `NEEDS_REVIEW` (`native_transaction_unconfirmed`).
 
+An `approval_vote` that reads `SUCCESS` means the vote was recorded. Its `details` are
+`{ approval_id, verdict, repeat_required, confirmation? }`. A `reject` cast within a block or two of a
+policy change can be stored by the provider while the request stays pending. The API resends the
+owner's signed reject for a few seconds. Then read `details.repeat_required`:
+
+- `true`: the request is still pending. Generate the `approval_vote` intent again and have the owner
+  sign another `reject` for the same approval.
+- `false`: nothing more to do.
+- `null`: not known yet, the vote has not been applied.
+
+`details.confirmation: "cancellation_observed"` means a fresh reject lost its reply and the API
+observed the cancellation from the earlier receipt: the reject took effect. Approves are
+unaffected. SDK 0.9.4 types both fields.
+
 ## Polling
 
 ```text

@@ -70,7 +70,7 @@ Unknown fields are rejected (strict objects). Field names are snake_case.
 | `actions` | which money actions exist at all. Missing → `policy_action_denied`. `limit_order` allows placing limit orders; cancelling one needs no action | provider |
 | `confidential` | must be `true` in every new policy (`agent_create`, `policy_update`; `validation_failed` otherwise), with confidential `transfer` destinations. Enables `shield`, a deposit address and the confidential form (the default) of swap/withdraw/transfer/limit order. `unshield` is refused whatever the policy says. A stored policy with it off still applies: its agent can withdraw from the legacy public balance, but needs a `policy_update` turning it on to shield, take a deposit or do anything else | provider |
 | `owner_approval` | outgoing actions go `PENDING_APPROVAL` until the owner votes; deposits unaffected. Hard limits still reject first | provider |
-| `assets` | tokens the agent may spend (`"any"` or explicit ids; `"*"` is not an asset id and is refused with `validation_failed`, here and as a `limits` key). Swaps may buy unlisted tokens but not sell them | provider |
+| `assets` | tokens the agent may spend (`"any"` or explicit ids; `"*"` is not an asset id and is refused with `validation_failed`, here and as a `limits` key; NEAR is `nep141:wrap.near`, and `near` or `native` is refused the same way). Swaps may buy unlisted tokens but not sell them | provider |
 | `limits` | per-asset caps per transaction and per rolling hour/day/month. Needs named assets to be meaningful | provider; per-transaction and windows also **API** |
 | `max_actions_per_hour` | rate cap on money actions regardless of amount | provider and **API** |
 | `destinations` | where withdrawals/transfers may go | **API** |
@@ -225,8 +225,8 @@ Omit it and every native method is off. A policy update replaces the whole polic
   `sign_in` (logins), `sign_transfer` (payments) or `sign_intent` (Intents). `sign_transfer`
   signs one transfer and judges only the recipient against `destinations`; it does not limit the
   amount.
-- The wallet provider treats native NEAR as wNEAR: a transfer or call deposit needs `assets` to
-  allow `nep141:wrap.near` (or `any`) and stays within its `limits`.
+- The wallet provider caps native NEAR (a transfer, a call deposit) with the `nep141:wrap.near`
+  `limits`, whatever `assets` lists, counted apart from wNEAR spends.
 - Signing routes return the signature and never broadcast. Only that call returns it: status and
   history show `signature: null`, older records too. NEAR transfer and call are sent by the
   wallet provider and read like any execution (`GET /v1/status`, type `native`), but `SUCCESS` waits

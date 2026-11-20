@@ -161,9 +161,10 @@ one is covered in [limit-orders.md](limit-orders.md).
   the one place that flag is still accepted: use it to empty leftover public funds (or `shield`
   them). The policy's `withdraw` action and destination rule apply either way.
 - `memo` for chains/exchanges that need one (the policy's `only` rule matches memo exactly).
-- NEAR (`nep141:wrap.near`, or `near`) withdrawn to chain `near` always arrives as **native NEAR**,
-  from the public or the confidential balance, as from a NEAR wallet or 1Click: no `wrap.near`
-  registration needed, and what exchanges and invoices expect. A confidential one is paid out by
+- NEAR is `nep141:wrap.near` (`near` and `native` are refused with `unsupported_token`). Withdrawn
+  to chain `near` it always arrives as **native NEAR**, from the public or the confidential
+  balance, as from a NEAR wallet or 1Click: no `wrap.near` registration needed, and what exchanges
+  and invoices expect. A confidential one is paid out by
   1Click, which unwraps it. There is no option to withdraw wNEAR to chain `near`.
 - `unsupported_chain` means a chain the catalog doesn't list; `route_unavailable` means no
   liquidity for that asset now; `invalid_address` when the address is not valid for the chain or the account does not

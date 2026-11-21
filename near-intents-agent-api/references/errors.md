@@ -66,6 +66,7 @@ Every error is a JSON:API document:
 | `idempotency_conflict` | `request` | 409 | same key used with a different body; resend original body or use a new key for a genuinely new request |
 | `rate_limited` | `api` | 429 | wait `Retry-After`, retry the same request. Every attempt counts against its key, refused ones too, so a retry loop keeps its own key limited; only attempts within the key's allowance count against the tenant |
 | `database_busy` | `api` | 503 | retryable; may have taken effect → retry with the **same** idempotency key, never a new one |
+| `transparency_unavailable` | `api` | 503 | the audit log did not confirm the request in time (a dispatch that can spend the agent's funds, an approving vote, a deletion), so its result was withheld; retryable, may have taken effect → retry with the **same** idempotency key (same signed intent for a vote or deletion), never a new one |
 | **Refusals (layer named; only that layer can lift it)** | | | |
 | `agent_grant_required` | `grant` | 403 | missing/revoked/expired/foreign grant → issue a grant or use the right token. At the exchange: the token verified but no live grant accepts its claims and audience → ask the owner. An `ngs_` session that ended (expiry, revoke) reads like any unknown token: drop the session and exchange afresh on the next call (do not auto-retry the refused call), and if that fails too, ask the owner |
 | `policy_action_denied` | `policy` | 403 | action not in policy, or a stored policy with `confidential` off (shield, deposit) → owner `policy_update` |
@@ -80,7 +81,7 @@ Every error is a JSON:API document:
 | `approval_backlog_full` | `policy` | 409 | `owner_approval` and 100 requests from this agent already wait for the owner's vote; nothing recorded or sent → the owner approves or rejects some with `approval_vote`, then send again. Failed requests take no place |
 | `policy_usage_unavailable` | `policy` | 409 | earlier actions have no per-asset count and a limit applies; nothing recorded or sent → clears when they leave the window, or the operator reconciles them |
 | `policy_denied` | `policy` | 409 | provider-side policy refused (asset, per-asset limit, hourly rate, …) → owner `policy_update` |
-| `wallet_frozen` | `policy` | 409 | owner froze the account → only `agent_unfreeze` resumes |
+| `wallet_frozen` | `policy` | 409 | owner froze the account → only `agent_unfreeze` resumes. A frozen account whose policy also denies the action answers `policy_action_denied` instead, so never read another code as "not frozen": check `frozen` on `GET /v1/agents/{agent_id}/policy` |
 | `policy_not_ready` | `policy` | 409 | latest policy not yet in force → wait for the policy intent to settle |
 | `native_method_denied` | `policy` | 403 | the policy's `native` switch for this route is off (incl. `sign_intent`, `sign_in`, `sign_transfer`), or the contract/domain is not listed (incl. a Sign-In-With-Solana domain), or the domain entry's `primary_types` omits the request's `primaryType` → owner `policy_update` |
 | `native_contract_forbidden` | `policy` | 403 | native transfer to or call of `intents.near`/`intents.far`; never allowed |
@@ -104,13 +105,14 @@ Every error is a JSON:API document:
 | `route_unavailable` | `provider` | 409 (400 on deposit) | no route or liquidity for this pair or amount; nothing submitted. Repeating the request won't help → try a different amount or pair under a new key |
 | `unsupported_chain`, `unsupported_token`, `invalid_address` | `request` | 400/409 | change chain/asset/address. `invalid_address`: the recipient is not a valid address for the chain (refused before the policy is read) or the account does not exist (a named NEAR recipient the API checks answers 400; a provider refusal answers 409). Nothing was sent |
 | `recipient_storage_unregistered` | `request` | 409 | a withdrawal (or its preview) of a token to a NEAR account with no storage registered on that token's contract (NEP-141 `storage_deposit`); the transfer cannot land. Not retryable; nothing sent → register the recipient's storage on that token contract, then send again under a **new** key (or move the funds inside NEAR Intents). Not `invalid_address`, which now means only an invalid address or a missing account |
-| `near_rpc_unavailable` | `api` | 503 | `transfer` only: NEAR RPC did not answer, so a named recipient could not be checked; retryable, nothing sent → retry the same request (same key) shortly |
+| `near_rpc_unavailable` | `api` | 503 | NEAR RPC did not answer. On a `transfer`, a named recipient could not be checked; on `agent_delete`, the RPC operators did not answer or did not agree on the account. Retryable, nothing sent → retry the same request (same key) shortly |
+| `owner_verification_unavailable` | `api` | 502 | the NEAR owner's key could not be checked: the RPC operators did not answer or did not agree (an owner proof, or the FullAccess check at onboarding); never an invalid signature. Retryable, nothing sent → retry the same request (same key) shortly |
 | `wallet_busy` | `provider` | 409 | another money op on this wallet is running; nothing sent, refusal recorded (not retryable) → after it finishes, a **new** key |
 | `spend_price_unavailable` | `budget` | 503 | no fresh USD price for budget accounting. Plain refusal, nothing recorded → send again once `GET /v1/tokens` shows a price |
 | `authorization_stale` | `auth` | 409 | grant/key revoked or policy/owner changed between admission and dispatch → re-evaluate. A request held for owner approval whose authority lapsed settles `FAILED` with it (`details.never_executed`, charge released); a later approve vote is refused with it |
 | `deposit_quota_exceeded` | `api` | 429 | 100 deposit addresses / 24 h for this agent → wait `available_at` |
 | **Provider (wallet service/1Click) state** | | | |
-| `provider_unavailable` | `provider` | 503 | the provider or the quote service behind it did not answer → read `/v1/network` (`one_click`). With `meta.retryable`: same request, same key, after `Retry-After`. Without it the refusal is recorded (nothing submitted): new key once the provider is ok. Generating an on-chain policy change returns it (retryable) when the chain cannot be reached to read the wallet's freeze state |
+| `provider_unavailable` | `provider` | 503 | the provider or the quote service behind it did not answer → read `/v1/network` (`one_click`). With `meta.retryable`: same request, same key, after `Retry-After`. Without it the refusal is recorded (nothing submitted): new key once the provider is ok. Generating an on-chain policy change returns it (retryable) when the chain cannot be reached to read the wallet's freeze state. `agent_delete` returns it when the balances cannot be read |
 | `provider_limit_reached` | `provider` | 429 | custody provider's daily quota for this wallet: 1,000 operations / rolling 24 h, `dry` previews included, quotes not; nothing sent → new work at `available_at` (don't burn the quota on repeated previews) |
 | `provider_rate_limited` | `provider` | 429 | a provider's rate limiter refused before running; nothing sent; always `Retry-After: 10`. With `meta.retryable` (reads, and calls that took a key): same request, same key, after it. Without it the refusal is recorded → new key after the wait |
 | `provider_refused` | `provider` | 409 (400 on a deposit quote) | the provider refused these terms; on a quote `detail` quotes 1Click's reason. Nothing sent or charged, repeating won't help → change the request, new key |
@@ -126,7 +128,7 @@ Every error is a JSON:API document:
 | `deletion_assets_remaining` | `balance` | 409 | `agent_delete`: the wallet holds a public or confidential balance, including funds that arrived since the owner signed (the API reads the balances again right before committing; an unreadable balance there is `provider_unavailable`). Nothing was retired; a failure at that final read is recorded `failed` and the agent stays archived and restorable → withdraw the funds, then delete again |
 | `intent_generation_recovery_required` | `api` | 409 | retry `generate-intent` with the same idempotency key |
 | `policy_revision_conflict` | `policy` | 409 | re-read policy, regenerate with new `expected_revision`, re-sign |
-| `policy_too_large` | `policy` | 400 | the policy's encrypted form is over 15,360 bytes, more than the custody contract can log in one write. Refused at generate-intent, before the owner signs; nothing sent → allow fewer assets, per-asset limits or contracts, generate again. Repeating it unchanged won't help |
+| `policy_too_large` | `policy` | 400 | the policy's encrypted form is over 15,360 bytes, more than the custody contract can log in one write. Refused at generate-intent, before the owner signs, and also by submit-intent; nothing sent → allow fewer assets, per-asset limits or contracts, generate again. Repeating it unchanged won't help |
 | `provider_policy_unavailable` | `provider` | 503 | an on-chain policy change could not read the wallet's policy record from the chain, or the chain holds none; nothing sent → try again later (see `provider_unavailable` for an unreachable chain) |
 | `policy_reconciliation_required` | `policy` | 409 | another policy intent still open → wait |
 | `policy_change_throttled`, `agent_unfreeze_throttled` | `policy` | 429 | cooldown → wait `available_at` |
@@ -136,7 +138,8 @@ Every error is a JSON:API document:
 | `agent_not_bound` | `request` | 409 | onboarding not finished → wait for `agent_create` SUCCESS |
 | `agent_archived`, `agent_deleted`, `agent_deletion_pending` | `policy` | 409 | lifecycle state forbids it; restore or stop |
 | `pause_before_archive`, `unpause_before_restore` | `request` | 409 | `agent_freeze` before `agent_archive`; `agent_unfreeze` before `agent_restore` |
-| `sponsor_busy`, `sponsor_balance_insufficient` | `api` | 503 | retry the same submit later |
+| `sponsor_busy` | `api` | 503 | `generate-intent` or `submit-intent`: the sponsor's keys are busy, or an earlier write of the same owner key is still in flight; nothing was sent. With `meta.retryable` → send the same request (same key) after `Retry-After` |
+| `sponsor_balance_insufficient` | `api` | 503 | retry the same submit later |
 | `transaction_unconfirmed` | `api` | 503 | retryable; broadcast but unconfirmed → poll status, or repeat with the **same** key (never sends twice); never as new work |
 | `execution_not_cancellable` | `request` | 409 | op already left `QUEUED` |
 | `approval_closed`, `approval_already_voted`, `approval_not_allowed` | `request`/`auth` | 409 | read the approval's current state. A held approval that lapsed settles `FAILED` with `authorization_stale` or `expired` (`details.never_executed`, charge released); voting on it is `approval_closed` |
@@ -153,7 +156,6 @@ Every error is a JSON:API document:
 | `grant_ambiguous` | `grant` | 409 | several live grants with different credentials accept this token → send `grant_id` (SDK `grantId`) from `GET …/grants`; for a renewed credential the longest-lived grant is used |
 | `grant_session_limit_reached` | `grant` | 429 | the grant holds 100 live sessions; nothing opened → exchange again at `meta.available_at` / `Retry-After`, and reuse a session until it nears expiry instead of exchanging per request (one `forGrantSession` client per grant) |
 | `issuer_unavailable` | `api` | 503 | the identity provider's signing keys could not be read, so the token could not be checked; `meta.retryable` → repeat the exchange after `Retry-After` (a token signed by a key just rotated reads this too). Cached keys keep verifying for up to an hour. If it persists, the issuer URL or host is wrong or down: check the grant's `issuer`, report `request_id` |
-| `transparency_unavailable` | `api` | 503 | the audit log could not confirm the exchange, so no session was returned; `meta.retryable` → repeat after `Retry-After` with a live subject token |
 | **Recovery** | | | |
 | `operation_not_recoverable` | `api` | 409 | not UNCERTAIN, already dispatched, non-recoverable kind, or other API key → keep polling |
 | `operation_recovery_unavailable` | `api` | 409 | another recovery running → poll |
@@ -239,7 +241,7 @@ What an agent does for the federated-grant codes, at a glance:
 | `grant_proof_invalid` | with a new proof | same key, body and `grant_id`, new `jti`; ask the owner if the grant is gone |
 | `grant_ambiguous` | with `grant_id` | pick it from `GET …/grants` |
 | `grant_session_limit_reached` | at `available_at` | reuse sessions |
-| `issuer_unavailable`, `transparency_unavailable` | yes, `Retry-After` | repeat the exchange |
+| `issuer_unavailable` | yes, `Retry-After` | repeat the exchange |
 | `grant_credential_invalid` | no | fix the credential, generate again |
 
 Never put identity tokens, `ngs_`/`ngt_` tokens or proofs in an error message, log or model context.

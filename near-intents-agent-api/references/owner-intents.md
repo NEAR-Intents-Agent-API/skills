@@ -142,13 +142,15 @@ Adapt to your wallet library's result shape (near-connect / wallet-selector retu
 | `limit_orders_open` (409) | `agent_delete`: a limit order is not payout-final yet → cancel or let it settle, then delete again |
 | `deletion_assets_remaining` (409) | `agent_delete`: the wallet still holds a public or confidential balance → withdraw it (a public one with `confidential: false`), then delete again |
 | `policy_revision_conflict` (409) | re-read `GET …/policy`, regenerate with its `revision`, re-sign |
-| `policy_too_large` (400) | the policy is too big for the custody contract to log in one write (encrypted form over 15,360 bytes); refused at generate-intent, before anyone signs → allow fewer assets, per-asset limits or contracts, generate again |
+| `policy_too_large` (400) | the policy is too big for the custody contract to log in one write (encrypted form over 15,360 bytes); refused at generate-intent, before anyone signs, and also by submit-intent → allow fewer assets, per-asset limits or contracts, generate again |
 | `provider_unavailable` / `provider_policy_unavailable` (503) | an on-chain change reads the wallet's freeze state from the chain: unreachable chain is `provider_unavailable` (retryable, same request after `Retry-After`), a missing policy record `provider_policy_unavailable`; nothing sent |
 | `policy_reconciliation_required` | another policy intent is still open → wait for it to settle/expire |
 | `policy_change_throttled` / `agent_unfreeze_throttled` (429) | wait until `meta.available_at` (also on `GET /v1/agents/{id}` cooldowns) |
 | `wallet_already_frozen` / `wallet_already_unfrozen` | already in that state |
 | `agent_creation_quota_exceeded` (429) | 100 agents/24h → wait for `available_at` or ask for a higher quota |
-| `sponsor_busy` / `sponsor_balance_insufficient` (503) | retry the same submit later |
+| `sponsor_busy` (503) | `generate-intent` or `submit-intent`: the sponsor's keys are busy, or an earlier write of the same owner key is still in flight; nothing was sent → with `meta.retryable`, send the same request (same key) after `Retry-After` |
+| `sponsor_balance_insufficient` (503) | retry the same submit later |
+| `owner_verification_unavailable` (502) | the RPC operators did not answer or did not agree on the NEAR owner's key; not an invalid signature → send the same request (same key) shortly |
 | `transaction_unconfirmed` (503) | broadcast but not confirmed → poll status, or submit the same signed intent again (never sends twice); never generate a new intent for it |
 | `agent_not_bound` | the agent is still onboarding → wait for `agent_create` SUCCESS |
 

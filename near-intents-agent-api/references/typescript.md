@@ -350,7 +350,7 @@ async function signNearIntent(generated, keyPair: KeyPair, rpcUrl: string) {
     return { ...intent, public_key: signer.public_key,
              signature: await signNep413(keyPair, { ...intent.payload, nonce: Buffer.from(intent.payload.nonce, "base64") }) };
   const access = await new JsonRpcProvider({ url: rpcUrl }).viewAccessKey({
-    accountId: signer.account_id, publicKey: signer.public_key, finalityQuery: { finality: "final" } });
+    accountId: signer.account_id, publicKey: signer.public_key, finalityQuery: { finality: "optimistic" } });
   const delegateAction = {
     senderId: signer.account_id, receiverId: intent.payload.receiverId, publicKey: keyPair.getPublicKey(),
     nonce: access.nonce + 1n, maxBlockHeight: BigInt(access.block_height) + 120n,

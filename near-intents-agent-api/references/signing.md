@@ -38,7 +38,8 @@ Payload: `{ receiverId, actions: [ { type: "FunctionCall", params: { methodName,
 (1–2 actions; `args` is a JSON object; `gas` and `deposit` are decimal strings).
 
 The signer needs chain state: query the owner's access key (`view_access_key`, finality
-`final`) on a NEAR mainnet RPC (e.g. `https://free.rpc.fastnear.com`,
+`optimistic`: the API acknowledges an owner write about 2 blocks before it is final, so a `final`
+read can return the previous nonce) on a NEAR mainnet RPC (e.g. `https://free.rpc.fastnear.com`,
 `https://rpc.mainnet.near.org`).
 
 ```text
@@ -84,7 +85,7 @@ Browser wallets: `wallet.signDelegateActions({ delegateActions: [intent.payload]
 `signedDelegateActions[0]`. The API's sponsor relays it; the owner pays no gas.
 
 `policy_delegate_signature_invalid` / `intent_payload_mismatch` on nep366 almost always means args bytes,
-nonce (stale access-key read: use finality `final` and sign right away) or the wrong key.
+nonce (stale access-key read: use finality `optimistic` and sign right away) or the wrong key.
 
 ## eip712 — EVM owners
 

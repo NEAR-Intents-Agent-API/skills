@@ -438,6 +438,7 @@ def sign_delegate(
 
 def sign_nep366(key: NearKey, account_id: str, payload: dict[str, Any], rpc_url: str) -> dict[str, str]:
     """NEP-366 gasless delegate action (on-chain owner changes; the API's sponsor pays gas)."""
+    # Optimistic: the API acknowledges an owner write before it is final, so a final read can return a stale nonce.
     rpc = httpx.post(
         rpc_url,
         json={
@@ -446,7 +447,7 @@ def sign_nep366(key: NearKey, account_id: str, payload: dict[str, Any], rpc_url:
             "method": "query",
             "params": {
                 "request_type": "view_access_key",
-                "finality": "final",
+                "finality": "optimistic",
                 "account_id": account_id,
                 "public_key": key.public_key,
             },

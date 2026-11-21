@@ -102,7 +102,7 @@ POST /v1/submit-intent
 ```
 
 4. Poll `GET /v1/status?correlation_id=intent_…&wait_ms=30000` until `SUCCESS`. Creation is on
-   chain (the API's sponsor pays gas); it usually takes a few seconds to a minute.
+   chain (the API's sponsor pays gas); it usually takes a few seconds.
 5. `GET /v1/agents/{agent_id}/policy` → `status: "APPLIED"` and `provider_policy_synced: true`.
 
 `owner` shapes:

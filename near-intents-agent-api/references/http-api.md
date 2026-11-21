@@ -207,7 +207,7 @@ curl -s -X POST "$API_URL/v1/agents/$AGENT_ID/grants/token" \
   `aud` = `{API url}/v1/agents/{agent_id}/grants/token`, `iat`, `exp` (at most 5 minutes after `iat`),
   `jti` (unique, 16 to 256 characters). Build it as in the proof recipe below.
 - Errors: `subject_token_invalid` 401, `agent_grant_required` 403, `grant_ambiguous` 409,
-  `grant_session_limit_reached` 429, `issuer_unavailable` and `transparency_unavailable` 503. See
+  `grant_session_limit_reached` 429, `issuer_unavailable` 503. See
   [errors.md](errors.md#workload-identity).
 
 #### Signing every request: `X-Grant-Proof`

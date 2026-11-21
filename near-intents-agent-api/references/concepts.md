@@ -43,7 +43,7 @@ When an execution is refused, the error code names what refused it and `layer` w
 | Code | Layer | Who fixes it |
 |---|---|---|
 | `agent_grant_required` | grant (missing, revoked, expired, wrong agent) | issue a grant / use the right token |
-| `wallet_frozen` | policy `frozen` | owner `agent_unfreeze` |
+| `wallet_frozen` | policy `frozen` (a frozen account whose policy also denies the action answers `policy_action_denied`) | owner `agent_unfreeze` |
 | `policy_action_denied` | policy `actions` / `confidential` | owner `policy_update` |
 | `public_balance_exit_only` | request (`confidential: false` on swap, limit order, transfer or deposit; any unshield) | never retry; omit `confidential`; shield leftover public funds or withdraw them with `confidential: false` |
 | `policy_destination_denied` | policy `destinations` | owner `policy_update` |

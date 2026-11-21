@@ -419,9 +419,10 @@ pub fn sign_delegate(key: &NearKey, sender_id: &str, payload: &Value, access_key
 
 /// NEP-366 delegate action for an `nep366` payload. Returns `{ signed_delegate }`.
 pub async fn sign_nep366(key: &NearKey, account_id: &str, payload: &Value, rpc_url: &str) -> Result<Value> {
+    // Optimistic: the API acknowledges an owner write before it is final, so a final read can return a stale nonce.
     let body = json!({
         "jsonrpc": "2.0", "id": "access-key", "method": "query",
-        "params": { "request_type": "view_access_key", "finality": "final",
+        "params": { "request_type": "view_access_key", "finality": "optimistic",
                     "account_id": account_id, "public_key": key.public_key() }
     });
     let rpc: Value = reqwest::Client::new()

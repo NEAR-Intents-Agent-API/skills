@@ -66,7 +66,7 @@ Unknown fields are rejected (strict objects). Field names are snake_case.
 
 | Field | Effect | Enforced by |
 |---|---|---|
-| `frozen` | kill switch: every money action refused (`wallet_frozen`). Use `agent_freeze`/`agent_unfreeze` intents, not a policy edit | provider |
+| `frozen` | kill switch: every money action refused (`wallet_frozen`, or `policy_action_denied` when the policy also denies the action). Use `agent_freeze`/`agent_unfreeze` intents, not a policy edit | provider |
 | `actions` | which money actions exist at all. Missing → `policy_action_denied`. `limit_order` allows placing limit orders; cancelling one needs no action | provider |
 | `confidential` | must be `true` in every new policy (`agent_create`, `policy_update`; `validation_failed` otherwise), with confidential `transfer` destinations. Enables `shield`, a deposit address and the confidential form (the default) of swap/withdraw/transfer/limit order. `unshield` is refused whatever the policy says. A stored policy with it off still applies: its agent can withdraw from the legacy public balance, but needs a `policy_update` turning it on to shield, take a deposit or do anything else | provider |
 | `owner_approval` | outgoing actions go `PENDING_APPROVAL` until the owner votes; deposits unaffected. Hard limits still reject first | provider |

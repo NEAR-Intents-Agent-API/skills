@@ -20,6 +20,7 @@ dedicated low-value owner account.
 | `01:check-api` | `01-getting-started/01-check-api.ts` | network, whoami, quotas, token catalogue |
 | `01:list-tokens` | `01-getting-started/02-list-tokens.ts` | token catalogue, decimals, prices |
 | `02:create-agent` | `02-your-first-agent/01-create-agent.ts` | `agent_create` with a NEAR owner (NEP-366) |
+| `02:create-with-grant` | `02-your-first-agent/04-create-with-grant.ts` | `agent_create` with a `grant`: `verifyAgentCreateIntent` before the wallet signs, then `grant_install` decides whether the token may be used |
 | `02:inspect-agent` | `02-your-first-agent/02-inspect-agent.ts` | agent, wallet, NEAR address, policy usage and history, balances, grants, history, provider records |
 | `02:multiple-agents` | `02-your-first-agent/03-multiple-agents.ts` | several agents per owner |
 | `03:near-policy-local` | `03-owner-wallets/near/01-policy-local.ts` | budget/timelock-only edit (NEP-413, off chain) |

@@ -114,7 +114,7 @@ exists, and a listed receiver is paid whatever the payload says, from that key's
 | `provider_unavailable`, `provider_rate_limited` | 503, 429 | 1Click's token listing could not be read for a withdrawal → retry later, same request ([errors.md](errors.md)) |
 | `provider_signature_invalid` | 502 | the returned signature did not verify and was discarded → try again; if it repeats, report the `request_id` |
 | `wallet_frozen` | 409 | account frozen → owner `agent_unfreeze` |
-| `intents_payload_use_sign_intent` | 403 | you sent an Intents payload to `evm/sign-message` or `solana/sign-message` → use `sign-intent` |
+| `intents_payload_use_sign_intent` | 403 | you sent an Intents payload to `evm/sign-message` or `solana/sign-message`, which always refuse it → use `sign-intent` |
 
 ## What to tell the owner
 

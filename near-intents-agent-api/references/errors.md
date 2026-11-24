@@ -92,7 +92,7 @@ Every error is a JSON:API document:
 | `intents_signer_mismatch` | `request` | 403 | `sign-intent` `signer_id` is not the signing key's own Intents account (lowercase `0x` address, or hex of the Solana key) |
 | `intents_payload_invalid` | `request` | 400 | `sign-intent` `payload` is not the canonical `JSON.stringify` text of a payload, or a field is wrong (`source.pointer`) |
 | `intents_deadline_invalid` | `request` | 400 | `sign-intent` `deadline` not RFC 3339 UTC with `Z`, already past, or beyond 300 s (96 h for a payload that pays only 1Click deposits) |
-| `intents_payload_use_sign_intent` | `policy` | 403 | an Intents payload was sent to `evm/sign-message` or `solana/sign-message` → use `sign-intent` |
+| `intents_payload_use_sign_intent` | `policy` | 403 | an Intents payload was sent to `evm/sign-message` or `solana/sign-message`, which always refuse it (no deployment setting allows it) → use `sign-intent` |
 | `solana_transaction_forbidden` | `policy` | 403 | `solana/sign-transfer` message is not exactly one allowed SOL/SPL transfer; `detail` says what to change |
 | `provider_signature_invalid` | `provider` | 502 | the wallet provider's signature did not verify against the agent's key and was discarded; nothing returned → ask again, report `request_id` if it repeats |
 | **Execution / routing** | | | |
@@ -148,8 +148,8 @@ Every error is a JSON:API document:
 | `approval_vote_unsupported` | `provider` | 409 | the provider lists no such owner wallet build on this network → ask the operator; nothing was stored |
 | **Grants** | | | |
 | `grant_limit_reached` | `grant` | 409 | 50 live grants → revoke unused |
-| `grant_credential_reused` | `grant` | 409 | new token per grant |
-| `grant_expiry_invalid` | `grant` | 409 | `expires_at` must be future and ≤365 days |
+| `grant_credential_reused` | `grant` | 409 | new token per grant. `generate-intent` for `grant_issue`, or for `agent_create` with `grant` (no agent is created). Not an error once the agent exists: a token another onboarding bound first leaves the agent created without the grant, as the status `details.grant_install: "refused:grant_credential_reused"` |
+| `grant_expiry_invalid` | `grant` | 409 (400 for `agent_create` with `grant`) | `expires_at` must be future and ≤365 days; for `agent_create` with `grant` also later than the 10-minute signing window (400, `source.pointer` `/grant/expires_at`). A grant that expired before the confirmation arrived is not an error: the agent is created and `details.grant_install` is `"refused:grant_expired"` |
 | `grant_credential_invalid` | `request` | 400 | `generate-intent` for a federated `grant_issue` (also `submit-intent` if the issuer registry or the API's URL changed since): untrusted issuer without `jwks`, `jwks` for a trusted or vendor-domain issuer, missing required claims, an `audience` for an issuer other than Entra ID (leave it out) or none for Entra, or a weak key. Nothing was signed; read `detail` and `source.pointer`, fix the credential, generate again. Never retry unchanged |
 | `subject_token_invalid` | `auth` | 401 | `POST …/grants/token`: the subject token was refused (signature, issuer, audience, lifetime, format, a claim that no grant pins, or a key assertion already exchanged). The cause is not disclosed. Get a **fresh** identity token for exactly `oidcGrantAudience(baseUrl, agentId)` (the audience the grant names for Entra), or sign a **new** assertion with a new `jti`; never resend the same one. Still refused: the grant's issuer, audience or claims do not match this workload, or the grant is revoked or expired → ask the owner |
 | `grant_proof_invalid` | `auth` | 401 | an `X-Grant-Proof` was refused (grant id, signing key, `aud`, `htm`, `body_sha256`, `idempotency_key`, lifetime, format, or a spent `jti`). Nothing ran. Sign a **new** proof (new `jti`) for the live `public_key` grant and the exact request, keeping the original `grant_id`, `Idempotency-Key` and body bytes. Still refused with every claim right: the grant was revoked or expired (read `GET …/grants`) → ask the owner |
@@ -171,6 +171,13 @@ until then `PROCESSING`. A finalized failure is `FAILED` with `native_transactio
 `native_transaction_mismatch`; one NEAR still does not know 30 minutes after dispatch is `NEEDS_REVIEW` with
 `native_transaction_unconfirmed`. Stop and review those; see [status-and-recovery.md](status-and-recovery.md).
 
+**A first grant that was not installed is a status too.** An `agent_create` signed with a `grant`
+settles `SUCCESS` when the agent exists, whatever happened to the grant. Read `details.grant_install`:
+`"installed"`, `"refused:grant_credential_reused"` (another onboarding bound the token first),
+`"refused:grant_expired"` (confirmation arrived after `expires_at`), or `null` (no grant, or not
+activated yet). On a refusal the token cannot act: the agent has no grant, so have the owner sign a
+`grant_issue` with a new token. Do not retry the `agent_create`.
+
 **Failed policy writes are statuses too.** A `policy_update` (or `agent_create`) whose transaction was relayed but
 whose inner receipt failed settles `FAILED` with `failure_code: "policy_transaction_failed"`: the revision was not
 applied. Read `GET …/policy`, fix the cause, then generate and sign a new intent.
@@ -183,7 +190,9 @@ whose `code` is the live code: `policy_action_denied`, `policy_destination_denie
 `policy_usage_unavailable`, `approval_backlog_full` or `insufficient_balance` (with `available_amount`), and for a limit order
 `amount_too_low`, `policy_price_deviation_exceeded` or `market_price_unavailable`, with the same meaning
 and the same layer to change. Such a code in `warnings` means the live request will be refused with
-it: tell the user, reduce the amount, wait, or ask the owner to change the policy. An asset
+it: tell the user, reduce the amount, wait, or ask the owner to change the policy. A withdrawal
+preview can also warn `provider_would_refuse`: the wallet provider's own dry run would refuse the
+withdrawal, and `detail` holds its reason; change the request rather than sending it. An asset
 `GET /v1/tokens` does not list (`unsupported_token`) or an invalid recipient (`invalid_address`)
 refuses the quote itself with 400, before any provider call; a recipient with no storage on the
 token's contract is refused `recipient_storage_unregistered` (409). A

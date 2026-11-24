@@ -54,7 +54,7 @@ Advisory only; the API never refuses a request because of it.
 
 | Method & path | Auth | Body | Returns |
 |---|---|---|---|
-| `POST /v1/generate-intent` → 201 | key (+ optional idem) | `{ type, agent_id?, …type fields }` | `GenerateIntentResponse` |
+| `POST /v1/generate-intent` → 201 | key (+ optional idem) | `{ type, agent_id?, …type fields }`; `agent_create` takes an optional `grant: { label, credential, expires_at }` ([grants.md](grants.md#the-first-grant-with-the-agent)) | `GenerateIntentResponse` (a passkey preview carries `preview.wallet_request`, an `agent_create` with a grant `preview.grant`) |
 | `POST /v1/submit-intent` → 202 | key | `{ type, correlation_id, signed_data }` | `StatusResponse` |
 
 Details: [owner-intents.md](owner-intents.md), signing: [signing.md](signing.md).
@@ -168,7 +168,8 @@ account's rules (action, destination, assets, schedule, USD budget, per-asset li
 `max_actions_per_hour`) and `insufficient_balance` never refuse either: each one the live request
 would fail is a `warnings[]` entry whose `code` is that request's error code
 (`policy_schedule_denied` also carries `available_at`, `insufficient_balance` carries
-`available_amount`). An asset `GET /v1/tokens` does not list (`unsupported_token`) or an invalid
+`available_amount`). A withdrawal preview can add `provider_would_refuse`: the wallet provider's own
+dry run would refuse it, its reason in `detail`. An asset `GET /v1/tokens` does not list (`unsupported_token`) or an invalid
 recipient (`invalid_address`) refuses the quote itself with 400, before any provider call and
 without calling the provider. A preview that reaches the provider is one of the wallet's custody
 operations even when it carries a warning; one the provider fails drops its pending row, so the
@@ -286,7 +287,7 @@ reads `PROCESSING`, with `details.provider_status` keeping the provider's own st
 | type | details |
 |---|---|
 | executions, `deposit`, `agent_delete` | `action`, `request?` (the request as admitted, in the request body's field names: optional `origin_asset`, `destination_asset`, `asset`, `amount`, `min_amount_out`, `chain`, `recipient`, `memo`, `reference`, `note`, `side`, `price`, `quantity`, `deadline` (the last four for limit orders), `confidential`; `confidential` is the balance it spends from, or for a deposit credits), `near_account_id?`, `provider_request_id?`, `chain?`, `execute_after?`, `delay_ms?`, `approval_id?`, `intent_hash?`, `tx_hash?`, `destination_tx_hash?`, `amount_out?`, `order_id?` (limit order: the resting order's id), `usd_value?` (the API's USD valuation at dispatch), `available_amount?` (a FAILED `insufficient_balance` / `custody_native_balance_required`), `deposit_address?`, `memo?`, `min_amount?`, `min_amount_out?`, `expires_at?`, `deposit_seen_at?` (deposit: first sighting of funds), `refund_to?`, `refund_tx_hash?`, `failure_reason?`, `reason?` (NEEDS_REVIEW), `never_executed?`, `never_submitted?`, `settled_late?`, + provider fields |
-| `agent_create` | `agent_id`, `revision`, `policy_hash`, `transaction_hash` |
+| `agent_create` | `agent_id`, `revision`, `policy_hash`, `transaction_hash`, `grant` (`{ grant_id, label, credential_type }` the signature also authorized, or `null`), `grant_install` (`"installed"` \| `"refused:grant_credential_reused"` \| `"refused:grant_expired"`; `null` without a grant or before the agent is created). The agent exists on `SUCCESS` whatever `grant_install` says; the grant can act only when it is `"installed"` |
 | `policy_update`, `agent_freeze`, `agent_unfreeze` | `revision`, `policy_hash`, `transaction_hash` (null when the revision applied without a blockchain transaction) |
 | `grant_issue` | `grant: GrantView \| null` |
 | `grant_revoke` | `grant_id`, `committed_correlation_ids`, `committed_cancellations` (`[{ order_id \| null, committed_at }]`, limit-order cancels that may still reach the provider), `committed_truncated` |
@@ -329,7 +330,9 @@ BalanceEntry = { asset_id, symbol, decimals, blockchain, price, …, balance_raw
 GrantView = { grant_id, agent_id, wallet_id, label, issued_at, expires_at,
               revoked_at, revoked_reason, owner_epoch,
               credential_type: "token" | "oidc" | "public_key",
-              owner_message }     // owner_message.credential: a token's SHA-256 hex, or the signed oidc / public_key object
+              owner_message,      // owner_message.credential: a token's SHA-256 hex, or the signed oidc / public_key object
+              issued_via }        // { type: "grant_issue" }: signed on its own
+                                  // | { type: "agent_create", transaction_hash, policy_revision: 1, policy_commitment }: signed with the agent
 
 ApprovalView = { approval_id, wallet_id, wallet_pubkey, request_hash,
                  status: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED",

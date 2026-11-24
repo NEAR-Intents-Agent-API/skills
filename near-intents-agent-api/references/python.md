@@ -62,6 +62,26 @@ owner = evm_owner(os.environ["AGENT_OWNER_EVM_PRIVATE_KEY"])
 sign = lambda g: sign_intent(g, evm_private_key=os.environ["AGENT_OWNER_EVM_PRIVATE_KEY"])
 ```
 
+To authorize the first grant with the same signature, add `grant` to the `agent_create` request;
+the client passes it through unchanged:
+
+```python
+cred = create_grant_credential()                                 # store cred["token"] encrypted first
+expires = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat().replace("+00:00", "Z")
+status = run_owner_intent(api, {"type": "agent_create", "name": "Treasury bot", "owner": owner,
+                                "policy": policy,
+                                "grant": {"label": "bot", "credential": cred["commitment"],
+                                          "expires_at": expires}}, sign)
+if status["details"]["grant_install"] == "installed":            # else "refused:grant_credential_reused" / "refused:grant_expired"
+    agent = api.for_grant(cred["token"])
+```
+
+The asset does not recompute the policy commitment the owner signs, and `sign_intent` signs
+whatever the API generated. When the signer is not your own script (a wallet that shows only a hash),
+verify the generated intent first: the TypeScript SDK's `verifyAgentCreateIntent`, or port it from
+[grants.md](grants.md#the-first-grant-with-the-agent). `expires_at` must outlast the 10-minute
+signing window.
+
 In a web product, skip the signers: return `generated["intent"]` and `generated["preview"]` to
 the browser and pass the wallet's output to `api.submit_intent(type, correlation_id, signed_data)`.
 

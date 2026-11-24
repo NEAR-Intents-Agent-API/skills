@@ -74,6 +74,28 @@ POST /v1/generate-intent
 - Owner signs → submit → `SUCCESS` → `details.grant.grant_id`.
 - Limit: 50 live (unrevoked, unexpired) grants per agent → `grant_limit_reached`.
 
+### The first grant with the agent
+
+To save the owner a signature, pass the same terms as `grant` in the `agent_create` intent
+(`label`, `credential`, `expires_at`, with `credential` in any of the forms above). The one
+signature then creates the agent and authorizes that grant: the grant is hashed into the policy
+commitment, so the revision 1 `agent_policy_hash` is `sha256(canonical JSON of { domain:
+"near-intents-agent-api.agent-create.v1", policy_commitment, grant })`, unchanged when there is no
+grant. A NEAR or EVM wallet shows the owner only that hash, so verify the generated intent on your
+backend before the wallet signs (TypeScript: `verifyAgentCreateIntent`, see
+[typescript.md](typescript.md#the-first-grant-in-the-same-signature-as-the-agent)).
+
+- `expires_at` must outlast the 10-minute signing window and stay within 365 days
+  (`grant_expiry_invalid`). A token already bound to a grant is refused at generate time
+  (`grant_credential_reused`), before any agent exists.
+- `SUCCESS` means the agent exists, not that the grant does. Read `details.grant_install`:
+  `"installed"` (use the token), `"refused:grant_credential_reused"` (another onboarding bound the
+  token first) or `"refused:grant_expired"` (confirmation arrived after `expires_at`). On a refusal
+  the agent has no grant: issue one with `grant_issue`. It is `null` before activation and for an
+  `agent_create` without a grant. `details.grant` names the grant (`grant_id`, `label`,
+  `credential_type`).
+- Store the token encrypted before the owner signs, as for `grant_issue`.
+
 **Store the token before you ask the owner to sign**, encrypted (KMS envelope or app-level
 AES-GCM), keyed by `grant_id` once known. If you lose it, the grant is useless: revoke it and
 issue another. Never log it, never put it in an LLM prompt, URL or client bundle.
@@ -109,7 +131,9 @@ cancelling needs a live grant (any of the account's), so keep one that can.
 Expired grants stop working by themselves.
 
 Audit: `GET /v1/agents/{id}/grants` (revoked included, each with the canonical `owner_message`
-the owner signed) and `GET /v1/agents/{id}/containment` (live grants + unfinished operations).
+the owner signed, and `issued_via`: `{ type: "grant_issue" }` for a grant signed on its own, or
+`{ type: "agent_create", transaction_hash, policy_revision: 1, policy_commitment }` for the first
+grant signed with the agent) and `GET /v1/agents/{id}/containment` (live grants + unfinished operations).
 
 ## Patterns
 

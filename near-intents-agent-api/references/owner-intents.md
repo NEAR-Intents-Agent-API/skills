@@ -16,7 +16,7 @@ The API builds the exact bytes, so the partner never assembles anything security
 
 | type | Extra fields (besides `agent_id`) | Notes |
 |---|---|---|
-| `agent_create` | `name`, `external_user_id?`, `owner`, `policy` (no `agent_id`) | reserves a `PENDING` agent and returns its `agent_id` immediately |
+| `agent_create` | `name`, `external_user_id?`, `owner`, `policy`, `grant?` (`label`, `credential`, `expires_at`; no `agent_id`) | reserves a `PENDING` agent and returns its `agent_id` immediately. With `grant`, the one signature also authorizes the first grant: see [below](#agent_create-with-a-first-grant) |
 | `policy_update` | `policy` (complete), `expected_revision` (current applied revision) | 10-min cooldown between ordinary changes |
 | `agent_freeze` | — | emergency stop; immediate; never throttled; the API then cancels the agent's open limit orders |
 | `agent_unfreeze` | — | own cooldown (`agent_unfreeze_throttled`) |
@@ -41,7 +41,9 @@ The API builds the exact bytes, so the partner never assembles anything security
     summary: string,
     revision?, previous_revision?, policy_hash?, policy?,   // policy changes
     deletion?: { near_account_id, beneficiary, public[], confidential[], open_limit_orders, assets_lost, retirement },
-    approval?: { approval_id, request_type, request_hash, verdict }
+    approval?: { approval_id, request_type, request_hash, verdict },
+    grant?: { grant_id, owner_message },        // agent_create with `grant`: the grant the signature also authorizes
+    wallet_request?: object                     // passkey: the request the WebAuthn challenge hashes
   }
 }
 ```
@@ -49,6 +51,21 @@ The API builds the exact bytes, so the partner never assembles anything security
 The SDK and the reference clients also return the idempotency key they used. If
 `generate-intent` is interrupted (timeout, crash), retry with the **same** `Idempotency-Key`;
 `intent_generation_recovery_required` means keep that key and retry it rather than starting over.
+
+## `agent_create` with a first grant
+
+`grant` takes the terms of `grant_issue` ([grants.md](grants.md#the-first-grant-with-the-agent)).
+The grant is hashed into the policy commitment the owner signs: the revision 1 `agent_policy_hash`
+is `sha256(canonical JSON of { domain: "near-intents-agent-api.agent-create.v1", policy_commitment,
+grant })`, and the plain `policy_commitment` when there is no grant. NEAR and EVM wallets show only
+that hash, and a passkey signs a WebAuthn challenge over it, which `preview.wallet_request` lets
+you recompute. Check, on your backend before the wallet signs, that the hash commits to exactly the
+previewed policy and the grant you asked for (TypeScript: `verifyAgentCreateIntent`).
+
+On `SUCCESS`, `details.grant_install` is `"installed"`, `"refused:grant_credential_reused"` or
+`"refused:grant_expired"`. The agent exists in all three; hand the token to the agent only on
+`"installed"`. A token already bound is refused by `generate-intent` itself, and `expires_at` must
+outlast the 10-minute signing window.
 
 ## Submit
 
@@ -141,6 +158,7 @@ Adapt to your wallet library's result shape (near-connect / wallet-selector retu
 | `owner_command_stale` (409) | the intent was signed for an earlier owner state, or is the signature of a deletion that was later restored → generate again and sign again |
 | `limit_orders_open` (409) | `agent_delete`: a limit order is not payout-final yet → cancel or let it settle, then delete again |
 | `deletion_assets_remaining` (409) | `agent_delete`: the wallet still holds a public or confidential balance → withdraw it (a public one with `confidential: false`), then delete again |
+| `grant_credential_reused` (409), `grant_expiry_invalid` (400 here, 409 for `grant_issue`) | `generate-intent` for `agent_create` with `grant` (or `grant_issue`): the token is already bound to a grant, or `expires_at` is past, inside the signing window or beyond 365 days → a new token / a later expiry; no agent was created |
 | `policy_revision_conflict` (409) | re-read `GET …/policy`, regenerate with its `revision`, re-sign |
 | `policy_too_large` (400) | the policy is too big for the custody contract to log in one write (encrypted form over 15,360 bytes); refused at generate-intent, before anyone signs, and also by submit-intent → allow fewer assets, per-asset limits or contracts, generate again |
 | `provider_unavailable` / `provider_policy_unavailable` (503) | an on-chain change reads the wallet's freeze state from the chain: unreachable chain is `provider_unavailable` (retryable, same request after `Retry-After`), a missing policy record `provider_policy_unavailable`; nothing sent |

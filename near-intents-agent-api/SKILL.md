@@ -99,13 +99,17 @@ Follow these in every integration; most bugs and lost-fund incidents come from b
 ## The lifecycle
 
 ```
-owner signs ──► agent_create (policy) ──► grant_issue (token commitment) ──► fund (deposit)
+owner signs ──► agent_create (policy, optional first grant) ──► grant_issue (token commitment) ──► fund (deposit)
                                                                       │
           agent (with X-Grant-Token) ──► swap / transfer / withdraw ──► GET /v1/status
 ```
 
 1. **Create the account** — `POST /v1/generate-intent {type:"agent_create", name, owner, policy}`
-   → owner signs → `POST /v1/submit-intent` → poll `GET /v1/status` to `SUCCESS`.
+   → owner signs → `POST /v1/submit-intent` → poll `GET /v1/status` to `SUCCESS`. Add `grant`
+   (`label`, `credential`, `expires_at`, the terms of step 2) and the same signature also authorizes
+   the first grant: skip step 2 for it, check `details.grant_install === "installed"` before using
+   the token, and, since NEAR and EVM wallets show only a hash, verify the generated intent first
+   (`verifyAgentCreateIntent` in SDK 0.9.5; [references/grants.md](references/grants.md#the-first-grant-with-the-agent)).
 2. **Issue a grant** — your backend makes a random `ngt_…` token, sends only its SHA-256 hex as
    `credential` in `grant_issue` with `label` and `expires_at` (≤365 days); owner signs; you store
    the token encrypted.

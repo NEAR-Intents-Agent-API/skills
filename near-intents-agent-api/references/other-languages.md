@@ -282,6 +282,7 @@ func GrantProof(priv ed25519.PrivateKey, grantID, method, rawURL string, body []
 
 - [ ] Base URL configurable; default hosted.
 - [ ] API key from secret storage; grant tokens per client instance.
+- [ ] `agent_create` with a first `grant`: pass the field through; use the token only when `details.grant_install` is `"installed"`; where a wallet shows only a hash, verify the intent as in [grants.md](grants.md#the-first-grant-with-the-agent) (the TypeScript SDK's `verifyAgentCreateIntent` is the reference).
 - [ ] Federated grants: session cache with early refresh, raw (not DER) JWS signatures, one serialization of the body.
 - [ ] Idempotency key generated, persisted, sent; returned on errors.
 - [ ] JSON:API error mapping with `code`, `retryable`, `available_at`, `request_id`.

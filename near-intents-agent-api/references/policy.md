@@ -212,7 +212,7 @@ Omit it and every native method is off. A policy update replaces the whole polic
 - `intents.near` and `intents.far` are never accepted for the NEAR key: listing them is
   `validation_failed`, a transfer or call to them `403 native_contract_forbidden`, a signature for
   them `403 signing_recipient_forbidden`. The EVM and Solana keys sign for them only through
-  `sign-intent`; `evm/sign-message` and `solana/sign-message` refuse an Intents payload
+  `sign-intent`; `evm/sign-message` and `solana/sign-message` always refuse an Intents payload
   (`intents_payload_use_sign_intent`).
 - **`sign_intent` has its own rules** and is not fenced by the rest of the policy. `receivers`,
   `one_click_deposits`, `withdrawals` and `max_slippage_bps` alone decide who a signed transfer may

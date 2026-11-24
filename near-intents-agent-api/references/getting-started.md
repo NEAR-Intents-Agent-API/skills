@@ -88,7 +88,8 @@ Content-Type: application/json
 ```
 
 Response (201): `correlation_id` (`intent_…`), `agent_id`, `expires_at`, `signer`,
-`intent: { standard, payload }`, `preview: { summary, policy, … }`.
+`intent: { standard, payload }`, `preview: { summary, policy, … }` (a passkey owner's preview also
+carries `wallet_request`, the request its WebAuthn challenge hashes).
 
 1. Show `preview.summary` and the policy to the owner.
 2. The owner's wallet signs `intent.payload` unchanged (method by `intent.standard`, see
@@ -113,6 +114,17 @@ POST /v1/submit-intent
 { "type": "passkey", "credential_id": "<b64url>", "public_key": "<b64url DER SPKI P-256>", "rp_id": "example.com", "origin": "https://example.com" }
 ```
 
+To save the owner a second signature, add the first grant to this request (section 5 explains
+tokens): `"grant": { "label": "assistant-session-42", "credential": "<64 hex>", "expires_at": "…" }`.
+The one signature then creates the agent and authorizes the grant, and you skip section 5 for that
+grant. The grant is hashed into the policy commitment, which NEAR and EVM wallets show only as a
+hash, so verify the generated intent on your backend before the wallet signs (TypeScript
+`verifyAgentCreateIntent`; details in [grants.md](grants.md#the-first-grant-with-the-agent)). When
+the status reaches `SUCCESS`, read `details.grant_install`: use the token only on `"installed"`;
+`"refused:grant_credential_reused"` or `"refused:grant_expired"` leave an agent with no grant, so
+continue with section 5. `expires_at` must outlast the 10-minute signing window, and a token that
+is already bound to a grant is refused by `generate-intent`.
+
 A NEAR owner key must be a **FullAccess** key on that account. EVM and passkey owners need no
 NEAR account: the API derives one and deploys it on first use, sponsored.
 
@@ -129,7 +141,8 @@ POST /v1/generate-intent
   "credential": "<64 hex>", "expires_at": "2027-01-01T00:00:00Z" }
 ```
 
-Owner signs, you submit, status `SUCCESS` returns `details.grant.grant_id`. Store
+Owner signs, you submit, status `SUCCESS` returns `details.grant.grant_id`. (A grant passed to
+`agent_create` in section 4 needs none of this.) Store
 `{grant_id, agent_id, encrypted token, label, expires_at}`. See [grants.md](grants.md). A CI job or
 cloud workload can use a federated grant instead (no token to store): [workload-identity.md](workload-identity.md).
 

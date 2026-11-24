@@ -54,6 +54,14 @@ api.submit_intent(generated["type"].as_str().unwrap(), cid, signed).await?;
 let status = api.wait_for_status(cid, std::time::Duration::from_secs(300)).await?;
 ```
 
+To authorize the first grant with the same signature, add `grant` to the `agent_create` request
+(`"grant": { "label": …, "credential": commitment, "expires_at": … }`); the client passes it through
+unchanged. After `SUCCESS`, use the token only when `status["details"]["grant_install"]` is
+`"installed"` (`"refused:grant_credential_reused"` and `"refused:grant_expired"` leave an agent with
+no grant). The asset does not recompute the policy commitment the owner signs; when a wallet shows
+only a hash, verify the generated intent first with the TypeScript SDK's `verifyAgentCreateIntent`
+([grants.md](grants.md#the-first-grant-with-the-agent)).
+
 EVM owner (feature `evm`): `sign_intent(&generated, None, "", Some(&evm_private_key_hex))`.
 Passkeys can only be signed in a browser.
 

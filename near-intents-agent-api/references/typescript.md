@@ -51,6 +51,50 @@ let status = await api.getStatus(generated.correlation_id, { waitMs: 30_000 });
 
 Typed narrowing: `GenerateIntentResponseOf<"policy_update">`, `StatusResponseOf<"swap">`, `StatusResponseOf<"limit_order">`.
 
+## The first grant, in the same signature as the agent
+
+SDK 0.9.5. `agent_create` takes an optional `grant` with the terms of `grant_issue` (`label`,
+`credential`, `expires_at`). The owner's one signature then creates the agent and authorizes that
+grant, because the grant is hashed into the policy commitment the wallet signs. A NEAR or EVM wallet
+shows the owner only that hash, and a passkey signs a challenge over it (`preview.wallet_request`),
+so check the generated intent on your backend before any wallet sees it:
+
+```ts
+import { createGrantCredential, verifyAgentCreateIntent } from "@near-intents-agent-api/sdk";
+
+const { token, commitment } = createGrantCredential();       // store token encrypted first
+const grant = {
+  label: "Trading assistant",
+  credential: commitment,
+  expires_at: new Date(Date.now() + 86_400_000).toISOString(),   // must outlast the 10-minute signing window
+};
+const generated = await api.generateIntent({ type: "agent_create", name, owner, policy, grant });
+// Throws AgentCreateVerificationError unless the signed hash commits to exactly
+// generated.preview.policy and this grant (NEAR, EVM and passkey owners).
+verifyAgentCreateIntent(generated, { grant });
+// The owner signs generated.intent; submit and wait as in "Owner intent loop".
+const status = await api.getStatus(generated.correlation_id, { waitMs: 30_000 });
+status.details.grant_install;      // "installed" | "refused:grant_credential_reused" | "refused:grant_expired" | null
+const assistant = api.forGrant(token);                         // use it only when "installed"
+```
+
+- Without `grant`, `verifyAgentCreateIntent(generated, { tenantId })` still checks the policy
+  commitment; the preview names no tenant then, so pass your partner tenant id.
+- `preview.grant` echoes the grant (`grant_id`, `owner_message`). Passing a grant the preview does
+  not carry, or the preview carrying one you did not ask for, throws as well.
+- A token already bound to a grant is refused by `generateIntent` (`grant_credential_reused`, 409),
+  before any agent exists; `expires_at` that is past, inside the signing window or beyond 365 days is
+  `grant_expiry_invalid`.
+- The agent is never refused because of its grant. If another onboarding bound the token first, or
+  the grant expired before confirmation, the agent exists without it and `grant_install` says why:
+  issue a grant with `grant_issue`. The token is useless until `grant_install` is `"installed"`.
+- `listGrants` shows the grant with `issued_via: { type: "agent_create", transaction_hash,
+  policy_revision: 1, policy_commitment }` (`{ type: "grant_issue" }` for a separately signed one).
+  The transaction's `agent_policy_hash` is `sha256(canonical JSON of { domain:
+  "near-intents-agent-api.agent-create.v1", policy_commitment, grant: owner_message })`; with no
+  grant it is the plain `policy_commitment`. `agentCreateCommitment`, `walletRequestChallenge` and
+  `serializeWalletRequestMessage` are exported for custom checks.
+
 ## Grants
 
 ```ts
@@ -187,7 +231,7 @@ retained operations the key admitted (newest first, as `getHistory` entries), `r
 detail was purged after retention (the key stays spent). Both empty is inconclusive; only a same-key,
 same-body replay under the original grant settles it
 ([status-and-recovery.md](status-and-recovery.md#lost-the-response-look-the-key-up)). It needs
-SDK 0.9.3 or later (`npm i @near-intents-agent-api/sdk@^0.9.3`), which also types `ApprovalView.votes` and
+SDK 0.9.3 or later (`npm i @near-intents-agent-api/sdk@^0.9.5` installs the current one), which also types `ApprovalView.votes` and
 the `recipient_storage_unregistered` code:
 
 ```ts

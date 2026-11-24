@@ -35,7 +35,7 @@ POST …/withdraw  { "asset": "<usdc>", "amount": "5000000", "chain": "base", "r
 → 200 { "dry": true, "type": "swap" | "withdraw" | "limit_order", "quote": { …1Click quote, snake_cased… },
         "spend": { "amount_usd": string | null, "budget": { "daily": {…}, "weekly": {…}, "monthly": {…} } },
         "fee": { "amount_usd": string, "percent": string } | null,
-        "warnings": [ { "code": "high_fee" | "asset_delivered_as_is"
+        "warnings": [ { "code": "high_fee" | "asset_delivered_as_is" | "provider_would_refuse"
                               | "policy_action_denied" | "policy_destination_denied" | "policy_asset_denied"
                               | "policy_transaction_limit_exceeded" | "policy_schedule_denied" | "spend_price_unavailable" | "spend_budget_exceeded"
                               | "policy_limit_exceeded" | "policy_action_limit_exceeded" | "policy_usage_unavailable"
@@ -101,8 +101,10 @@ What the rest of the answer holds:
 - `warnings`: `high_fee` when the route keeps more than 5%, judged only where `fee` is valued;
   `asset_delivered_as_is` when a
   non-USDC asset is withdrawn to chain `hypercore`: it lands in HyperCore spot as that asset, not as
-  USDC perps margin. Swap to USDC first to fund perps. Any rule or check code (above) means the live
-  request would be refused with it. Show `detail` to the user.
+  USDC perps margin. Swap to USDC first to fund perps. `provider_would_refuse` (withdrawal previews):
+  the wallet provider's own dry run of the withdrawal says it would refuse it; its reason is in
+  `detail`. Any rule or check code (above) means the live request would be refused with it. Show
+  `detail` to the user.
 
 ## Execute
 

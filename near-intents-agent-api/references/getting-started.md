@@ -175,7 +175,7 @@ Idempotency-Key: swap_9a1e…
 The account's rules do not refuse it; an unlisted asset or invalid recipient does (400). `spend` shows what the budget would count and what is left, `fee`
 the share the route keeps, `warnings` any `high_fee` plus each rule the live swap would fail
 (policy, schedule, USD budget, limits, balance) under the code the live swap would get. A frozen, archived or deleted
-account gets no quote: `wallet_frozen`, `agent_archived` or `agent_deleted`. Drop `dry` to execute:
+account gets no quote: `wallet_frozen`, `agent_archived` or `agent_deleted`. A swap (and a withdrawal) is exact input (`amount`, optional `min_amount_out`) or exact output (`amount_out` with `max_amount_in`); a quote that already misses the figure sent warns `below_min_amount_out` or `above_max_amount_in`, and a withdrawal takes no `memo` ([executions.md](executions.md#exact-input-or-exact-output)). Drop `dry` to execute:
 you get `202` with a `StatusResponse` (`op_…`). The swap runs on the confidential balance: omit `confidential` (`confidential: false` is refused with `public_balance_exit_only`). Poll it to a terminal status. See [executions.md](executions.md) and [status-and-recovery.md](status-and-recovery.md).
 
 ## 8. Before going live

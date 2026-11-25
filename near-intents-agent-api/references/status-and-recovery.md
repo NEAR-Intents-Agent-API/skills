@@ -175,6 +175,12 @@ the original body and key.
 ## NEEDS_REVIEW
 
 Automatic settlement stopped because something did not add up (e.g. evidence conflicts).
+`failure_code` says why: `provider_review_required` (the provider cannot establish the outcome),
+`provider_partially_failed` (part of the request ran; value may have moved),
+`amount_out_below_minimum` (reported delivery below `details.requested_min_amount_out`),
+`delivered_asset_mismatch` (a withdrawal reported delivering another asset),
+`provider_reply_lost` (the request was sent, but the provider's answer never arrived, so whether it
+ran is unknown), or one of the native codes above. The budget stays charged.
 
 1. Stop polling and stop retrying.
 2. Read `details.reason`; cross-check `GET …/provider/requests`, `…/provider/audit`,

@@ -60,7 +60,7 @@ Every error is a JSON:API document:
 | `invalid_api_key` | `auth` | 401 | unknown, invalid, expired or revoked key, stray whitespace, or a base URL from a different deployment; the detail names the partner portal; fix config, don't retry |
 | `api_key_retired` | `auth` | 401 | a key created before the partner portal; create a new key in the portal and deploy it; never retry |
 | `key_verification_unavailable` | `api` | 503 | the portal could not confirm a key it has not answered for before; retry the same request shortly (same key) |
-| `validation_failed` | `request` | 400 | fix the fields in `source.pointer` (also: an amount that moves funds is `0`, a swap's two assets are the same, a native `sign-transaction` body is not one transaction) |
+| `validation_failed` | `request` | 400 | fix the fields in `source.pointer` (also: an amount that moves funds is `0` or not digits only, `amount` and `amount_out` both or neither, `max_amount_in` without `amount_out`, `min_amount_out` with `amount_out`, a `memo` on a withdrawal, `amount_out` or `min_amount_out` on a public-balance withdrawal to chain `near`, a swap's two assets are the same, a native `sign-transaction` body is not one transaction) |
 | `invalid_json`, `invalid_cursor` | `request` | 400 | fix the request |
 | `idempotency_key_required` | `request` | 400 | add `Idempotency-Key` |
 | `idempotency_conflict` | `request` | 409 | same key used with a different body; resend original body or use a new key for a genuinely new request |
@@ -98,7 +98,10 @@ Every error is a JSON:API document:
 | **Execution / routing** | | | |
 | `public_balance_exit_only` | `request` | 400 | `confidential: false` on swap, limit order, transfer or deposit address, or any unshield, live or `dry`; nothing submitted, **never retry**. Omit `confidential` (the confidential balance is the account). Leftover public funds: `shield` them, or `withdraw` with `confidential: false` (the only request that accepts it). A missing or invalid grant is reported first |
 | `insufficient_balance` | `balance` | 400/409 | the balance the request spends from (confidential, or the legacy public one for a shield or a `confidential: false` withdrawal) holds less than it spends; nothing submitted or charged. `meta.available_amount` is what it can still spend → fund the account or send at most that. The API's own check is 400 with no history row; a provider refusal is 409 |
+| `below_min_amount_out` | `request` | 409 | `min_amount_out` is above the guaranteed output (`quote.min_amount_out`, not the estimate `quote.amount_out`) of a fresh quote for a swap or withdrawal; nothing signed or sent, not retryable → lower the floor (or accept the quote), then a **new** key. A dry run whose quote already misses it warns with this code |
+| `above_max_amount_in` | `request` | 409 | exact output: `max_amount_in` is below a fresh quote's `amount_in`; nothing signed or sent, not retryable → raise the ceiling (0.5 to 1% above a quote's `amount_in`), or ask for less, then a **new** key. A dry run whose quote already misses it warns with this code |
 | `amount_too_low` | `request` | 400/409 | below the minimum → quote at least `meta.min_amount` (atomic units of the asset sent) when present, else a larger amount. 400: the API's own check (a limit order worth under 0.1 USD, `source.pointer` `/quantity`; a deposit quote); 409: the provider's route minimum |
+| `request_no_longer_accepted` | `request` | status `FAILED`, `failure_code` | a timelocked (`QUEUED`) request queued in a shape the API no longer accepts, such as a withdrawal with a `memo`; it never reached the provider and nothing is charged → send it again in the current shape under a **new** key |
 | `limit_order_not_found` | `request` | 404 | `GET`/cancel of an order id that is not this agent's → read `GET …/limit-orders` for the ids |
 | `limit_orders_open` | `api` | 409 | `agent_delete`: an order is not payout-final yet; checked before `deletion_assets_remaining`, and a fill or refund would land in a deleted account → cancel the orders (or freeze, which cancels them), wait until each `is_payout_status_final`, then delete (see [limit-orders.md](limit-orders.md)) |
 | `custody_native_balance_required` | `balance` | 409 | the agent's own NEAR account holds less NEAR than the call costs; nothing sent. `meta.available_amount` (held) and `meta.min_amount` (cost) are in yoctoNEAR → fund that account, then a **new** key |
@@ -215,7 +218,7 @@ account gets no quote: a swap quote and a withdrawal preview are both refused wi
    which replays or reconciles it, or read status. If you lost the response before storing the
    `correlation_id`, [look the key up](status-and-recovery.md#lost-the-response-look-the-key-up).
    Never a new key: that can spend twice.
-4. **Proven refusals** (`public_balance_exit_only`, `route_unavailable`, `wallet_busy`, a recorded `provider_unavailable`, and
+4. **Proven refusals** (`public_balance_exit_only`, `route_unavailable`, `below_min_amount_out`, `above_max_amount_in`, `wallet_busy`, a recorded `provider_unavailable`, and
    the policy/grant/validation refusals in the decision table): nothing was sent. A refusal
    recorded as an operation's outcome replays under its key, so a later attempt is a new request →
    **new** idempotency key. Budget and limit refusals of a new execution

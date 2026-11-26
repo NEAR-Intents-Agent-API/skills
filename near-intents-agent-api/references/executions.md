@@ -6,9 +6,9 @@ All are `POST /v1/agents/{agent_id}/<action>` and return `202` with a `StatusRes
 
 | Action | Headers | Body | Policy needs |
 |---|---|---|---|
-| `swap` | key, grant, idem | `origin_asset`, `destination_asset`, `amount`, `min_amount_out?`, `confidential?`, `note?`, `dry?` | `swap`, `confidential: true` |
+| `swap` | key, grant, idem | `origin_asset`, `destination_asset`, then `amount`, `min_amount_out?` (exact input) or `amount_out`, `max_amount_in` (exact output), `confidential?`, `note?`, `dry?` | `swap`, `confidential: true` |
 | `limit-orders` | key, grant, idem | `base_asset`, `quote_asset`, `side`, `quantity`, `price`, `deadline?`, `confidential?`, `note?`, `dry?` | `limit_order`, `confidential: true` |
-| `withdraw` | key, grant, idem | `asset`, `amount`, `chain`, `recipient`, `memo?`, `reference?`, `confidential?`, `note?`, `async?`, `dry?` | `withdraw`, destination allowed |
+| `withdraw` | key, grant, idem | `asset`, `chain`, `recipient`, then `amount`, `min_amount_out?` (exact input) or `amount_out`, `max_amount_in` (exact output), `reference?`, `confidential?`, `note?`, `async?`, `dry?` | `withdraw`, destination allowed |
 | `transfer` | key, grant, idem | `asset`, `amount`, `recipient`, `reference?`, `confidential?`, `note?` | `transfer`, destination allowed, `confidential: true` |
 | `shield` | key, grant, idem | `asset`, `amount` | `confidential: true` |
 | `unshield` | key | `asset`, `amount` | refused: every request is `public_balance_exit_only` |
@@ -23,16 +23,50 @@ legacy public balance: with `shield` the only way to empty it. `unshield` is ref
 request, so never offer it. Work already recorded on the public balance (held, in flight, resting
 limit orders) still settles, and a replay of its key returns its record.
 
-`amount` is atomic (integer string) and must be greater than zero for every action that moves funds
-(`validation_failed` otherwise). Asset ids come from `GET /v1/tokens`. A recipient that is not a valid
+Amounts are atomic integer strings: digits only, no sign and no leading zeros, and greater than zero for
+every action that moves funds (`validation_failed` otherwise). Asset ids come from `GET /v1/tokens`. A recipient that is not a valid
 address for its chain is refused with `400 invalid_address` before the policy is read.
+
+## Exact input or exact output
+
+`swap` and `withdraw` take one of two shapes. Never mix them (`validation_failed`): exactly one of
+`amount` and `amount_out` is required, `max_amount_in` goes only with `amount_out`, and
+`min_amount_out` only with `amount`.
+
+- **Exact input**: `amount` is what the account spends; `min_amount_out` (optional) is the least the
+  recipient must get.
+- **Exact output**: `amount_out` is what the recipient gets, exactly; `max_amount_in` is the most the
+  account may spend to get it. The unused input returns to the balance it was spent from.
+
+```json
+POST …/swap      { "origin_asset": "nep141:wrap.near", "destination_asset": "<usdc>", "amount": "1000000000000000000000000", "min_amount_out": "2900000" }
+POST …/swap      { "origin_asset": "nep141:wrap.near", "destination_asset": "<usdc>", "amount_out": "3000000", "max_amount_in": "1100000000000000000000000" }
+POST …/withdraw  { "asset": "<usdc>", "chain": "base", "recipient": "0xabc…", "amount": "5000000", "min_amount_out": "4900000" }
+POST …/withdraw  { "asset": "<usdc>", "chain": "base", "recipient": "0xabc…", "amount_out": "5000000", "max_amount_in": "5200000" }
+```
+
+- The balance must hold all of `max_amount_in`, and per-asset limits and the USD budget charge all
+  of it, even the part returned. Size the ceiling to what the account may risk.
+- A withdrawal from the public balance (`confidential: false`) to chain `near` takes `amount` alone and
+  delivers it exactly: `amount_out` or `min_amount_out` there is `validation_failed`, live and `dry`.
+- A withdrawal takes **no `memo`** (`validation_failed`): no route carries one to the recipient, so do
+  not offer to send one, and do not withdraw to an address that needs one (an exchange deposit tag).
+- The provider takes a fresh quote for each live request and checks your figure against it before
+  anything is signed or sent. A `min_amount_out` above the quote's guaranteed output
+  (`quote.min_amount_out`, not the estimate `quote.amount_out`) is refused `below_min_amount_out`; a
+  `max_amount_in` below the quote's `amount_in` is refused `above_max_amount_in`. Both are 409, send
+  nothing and are not retryable: change the figure and use a new key. A dry run's quote is an
+  earlier one, so leave 0.5 to 1% room between it and the floor or ceiling you send.
+- At settlement an exact-output request completes only on a reported delivery of at least
+  `amount_out`; less stops as `NEEDS_REVIEW` with `amount_out_below_minimum`.
 
 ## Quote first
 
 ```json
 POST …/swap      { "origin_asset": "nep141:wrap.near", "destination_asset": "<usdc>", "amount": "1000000000000000000000000", "dry": true }
 POST …/withdraw  { "asset": "<usdc>", "amount": "5000000", "chain": "base", "recipient": "0xabc…", "dry": true }
-→ 200 { "dry": true, "type": "swap" | "withdraw" | "limit_order", "quote": { …1Click quote, snake_cased… },
+→ 200 { "dry": true, "type": "swap" | "withdraw" | "limit_order", "quote": { amount_in?, min_amount_in?, amount_out?, min_amount_out?,
+                                                                    withdraw_fee?, refund_fee?, amount_in_usd?, amount_out_usd? },
         "spend": { "amount_usd": string | null, "budget": { "daily": {…}, "weekly": {…}, "monthly": {…} } },
         "fee": { "amount_usd": string, "percent": string } | null,
         "warnings": [ { "code": "high_fee" | "asset_delivered_as_is" | "provider_would_refuse"
@@ -41,6 +75,7 @@ POST …/withdraw  { "asset": "<usdc>", "amount": "5000000", "chain": "base", "r
                               | "policy_limit_exceeded" | "policy_action_limit_exceeded" | "policy_usage_unavailable"
                               | "approval_backlog_full"
                               | "insufficient_balance"
+                              | "below_min_amount_out" | "above_max_amount_in"
                               | "amount_too_low" | "policy_price_deviation_exceeded" | "market_price_unavailable",   // the last three: limit orders
                         "detail": string, "available_at"?: string, "available_amount"?: string } ],
         "owner_approval": boolean }   // true: the live request waits in PENDING_APPROVAL for the owner
@@ -52,9 +87,10 @@ API's own: what the order spends and the least a full fill delivers). A withdraw
 an identical preview for 60 s, an expired one needs a new key. The API sets no preview cap: every preview that
 reaches the provider counts toward the wallet's 1,000 custody operations per rolling 24 h
 (`provider_limit_reached` when spent; swap quotes do not count). The `quote`
-object belongs to 1Click (amount out, fees, time estimate); treat its fields as informational
-and do not hard-code its shape. Use it to show the user expected output and to choose
-`min_amount_out` (minimum output).
+object carries 1Click's figures, each only when it sent one: `amount_in`, `min_amount_in`,
+`amount_out` (the estimate), `min_amount_out` (the guaranteed output), `withdraw_fee`, `refund_fee`,
+`amount_in_usd` and `amount_out_usd`. Use it to show the user the expected output and to choose
+`min_amount_out` (exact input) or `max_amount_in` (exact output, with room above `quote.amount_in`).
 
 **Dry runs report the rules, they are not refused by them.** A quote or preview on a usable
 account goes to 1Click and returns `200`. It also checks what the live request would face: the
@@ -63,11 +99,14 @@ policy's action switch and destination rule, `assets`, `limits.per_transaction`,
 Each one it would fail is a `warnings` entry whose `code` is the code the live request
 would get (`policy_action_denied`, `policy_destination_denied`, `policy_asset_denied`,
 `policy_transaction_limit_exceeded`, `policy_schedule_denied`, `spend_price_unavailable`, `spend_budget_exceeded`, `policy_limit_exceeded`,
-`policy_action_limit_exceeded`, `policy_usage_unavailable`, `approval_backlog_full`, `insufficient_balance`; for a limit order
+`policy_action_limit_exceeded`, `policy_usage_unavailable`, `approval_backlog_full`, `insufficient_balance`; for a swap or
+withdrawal whose fresh quote already misses the figure sent also `below_min_amount_out` and `above_max_amount_in`; for a limit order
 also `amount_too_low`, `policy_price_deviation_exceeded`, `market_price_unavailable`).
 `policy_schedule_denied` also carries `available_at`, when the schedule next
 allows it; `insufficient_balance` carries `available_amount`, what the balance can still spend (atomic
-units). Only the live request is refused with these codes.
+units). Only the live request is refused with these codes. A `below_min_amount_out` or
+`above_max_amount_in` warning means the quote already misses your floor or ceiling: raise the
+ceiling, lower the floor, or expect the live request to be refused.
 
 The request's own checks refuse the quote itself. An asset `GET /v1/tokens` does not list
 (`unsupported_token`) or a recipient that is not a valid address (`invalid_address`) is a 400, as it
@@ -118,12 +157,16 @@ Content-Type: application/json
 { "origin_asset": "nep141:wrap.near", "destination_asset": "<usdc>", "amount": "1000000000000000000000000", "min_amount_out": "2900000" }
 ```
 
+(Exact output sends `amount_out` and `max_amount_in` in place of `amount` and `min_amount_out`.)
 Then poll `GET /v1/status?correlation_id=op_…&wait_ms=30000` (see
 [status-and-recovery.md](status-and-recovery.md)). Typical paths:
 
 - no timelock/approval: `PROCESSING` → `SUCCESS` (`details.amount_out`, `intent_hash`, `tx_hash`).
   `amount_out` is the delivered amount and is present only at `SUCCESS` (or `REFUNDED` after a
-  partial fill); before then read `details.expected_amount_out`, and never treat it as final
+  partial fill); before then read `details.expected_amount_out`, and never treat it as final. A
+  settled exact-output request also carries `details.amount_in` (the input actually spent; the rest of
+  `max_amount_in` is back in the balance) and `details.quote` (the quote it ran with, the same
+  figures as a dry run's `quote`)
 - timelock: `QUEUED` (`details.execute_after`) → `PROCESSING` → …
 - approval: `PENDING_APPROVAL` (`details.approval_id`) → owner votes → `PROCESSING` → …
 - route refunded: `REFUNDED` (`details.refund_tx_hash`); never filled: `FAILED` with `failure_code`
@@ -136,9 +179,11 @@ that budget). `withdraw` with `async: true` returns as soon as it is accepted.
 
 - Inside the account; funds never leave NEAR Intents. Needs no destination rule.
 - `origin_asset` and `destination_asset` must differ (`validation_failed`).
-- `min_amount_out`: atomic minimum output of the destination asset, sent to the provider. The
-  quote does not apply it; a swap the provider reports below it never reads `SUCCESS` but
-  `NEEDS_REVIEW` with `amount_out_below_minimum` (`details.requested_min_amount_out`).
+- `min_amount_out`: atomic minimum output of the destination asset, sent to the provider and checked
+  against a fresh quote's guaranteed output (`below_min_amount_out`, 409, before anything is signed).
+  A swap the provider reports below it never reads `SUCCESS` but `NEEDS_REVIEW` with
+  `amount_out_below_minimum` (`details.requested_min_amount_out`). `amount_out` with `max_amount_in`
+  buys an exact amount instead (see [Exact input or exact output](#exact-input-or-exact-output)).
 - `amount_too_low`: below the route minimum (confidential swaps have their own minimum).
   `meta.min_amount`, when the provider states it, is that minimum in atomic units of the asset
   sent: quote at least that. A refusal recorded on an operation keeps it as `details.min_amount`,
@@ -162,7 +207,12 @@ one is covered in [limit-orders.md](limit-orders.md).
 - Pays from the confidential balance. `confidential: false` pays from the legacy public balance,
   the one place that flag is still accepted: use it to empty leftover public funds (or `shield`
   them). The policy's `withdraw` action and destination rule apply either way.
-- `memo` for chains/exchanges that need one (the policy's `only` rule matches memo exactly).
+- No `memo`: a withdrawal request never carries one, and the policy's `only` rule matches a
+  `withdraw` destination signed with `memo: null`.
+- Exact input (`amount`, optional `min_amount_out`) or exact output (`amount_out` with
+  `max_amount_in`); see [Exact input or exact output](#exact-input-or-exact-output). Exact input
+  debits `amount`, and the recipient gets it less the network or bridge fee in the destination chain's
+  units, so a payee owed an exact figure should be paid exact output.
 - NEAR is `nep141:wrap.near` (`near` and `native` are refused with `unsupported_token`). Withdrawn
   to chain `near` it always arrives as **native NEAR**, from the public or the confidential
   balance, as from a NEAR wallet or 1Click: no `wrap.near` registration needed, and what exchanges
@@ -266,8 +316,10 @@ request you want (reusing the key returns the same address).
   Each item is `{ correlation_id, type, status, details, receipt }`: `status` is `PROVEN`,
   `PENDING` (the next checkpoint will cover it) or `UNLOGGED` (before the log); `receipt` is null
   until `PROVEN`. `details` is the account's own view (adds `usd_value`, `note`). The `receipt`
-  itself holds only the settled terms (recipient, asset, amount, `reference`, chain, memo,
-  settlement hashes), no agent, account or `note`, so it is safe to hand to a payee. It does not
+  itself holds only the settled terms (recipient, asset, `reference`, chain, settlement hashes, and
+  the amounts: `amount` with `min_amount_out?` and a reported `amount_out?` for exact input, or
+  `amount_out` and `max_amount_in` for exact output; `memo` only on a withdrawal receipt issued
+  before withdrawals dropped it), no agent, account or `note`, so it is safe to hand to a payee. It does not
   prove who paid; a limit order's proves it was funded and placed, not filled. Anything else
   (unfinished, shield, unshield, native signing) answers 409 `receipt_not_available`. Receipts last
   as long as the audit log (90 days). Verify one with the SDK:
@@ -286,11 +338,12 @@ Only for `UNCERTAIN` operations that provably never reached the provider (no
 2. Balance enough? Read `available` / `available_raw` on `GET …/balances` (confidential, the account
    the request spends from; `?source=public` only for a legacy balance to shield or withdraw). That is
    the balance less queued or timelocked work not yet dispatched; don't subtract queued work yourself.
-3. Dry quote (swap/limit order/withdraw) and show it, with `fee` and `warnings`. A rule or check code in
+3. Dry quote (swap/limit order/withdraw) and show it, with `fee` and `warnings`. For exact output,
+   set `max_amount_in` from `quote.amount_in` plus 0.5 to 1% room. A rule or check code in
    `warnings` means the live call would be refused with it: stop or adjust before sending. A refused
    quote (`wallet_frozen`, `agent_archived`, `agent_deleted`) means the account can do nothing.
 4. Create + persist the idempotency key and body, then send, with a `reference` for a payment tied
    to an order and a `note` saying why.
 5. Poll to a stable status, report `SUCCESS`/`REFUNDED`/`FAILED` with hashes; report an amount
-   received (`amount_out`) only from `SUCCESS`; for `UNCERTAIN` say "outcome pending" and keep
+   received (`amount_out`) only from `SUCCESS` (an exact-output request: and the input spent, `amount_in`); for `UNCERTAIN` say "outcome pending" and keep
    observing. After `SUCCESS` a payee can be given the receipt.

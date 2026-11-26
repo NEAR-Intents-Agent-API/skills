@@ -9,9 +9,9 @@
 | `PENDING_APPROVAL` | waiting for the owner's `approval_vote` (`details.approval_id`). If its deadline passes or its authority lapses first it settles `FAILED` (`expired` / `authorization_stale`, `details.never_executed`, charge released) | ask the owner; poll slowly |
 | `PENDING_DEPOSIT` | deposit address issued, waiting for the payer's funds. **Only deposits report it** | show `deposit_address`; poll until `expires_at` (a payment after it reopens the deposit) |
 | `PROCESSING` | submitted, settlement not yet observed. Includes a withdrawal's or swap's bridge leg waiting on 1Click (`details.provider_status` keeps the provider's own state) and a provider `success` whose settlement it still reports pending | keep polling |
-| `SUCCESS` | settled with evidence | done; `details.amount_out` (delivered) is present only now, or at `REFUNDED` after a partial fill. Before that read `expected_amount_out` and treat it as an estimate. A **limit order** is different: `SUCCESS` means funded and resting, not filled (`details.order_id`; see [limit-orders.md](limit-orders.md)) |
+| `SUCCESS` | settled with evidence | done; `details.amount_out` (delivered) is present only now, or at `REFUNDED` after a partial fill. Before that read `expected_amount_out` and treat it as an estimate. An exact-output swap or withdrawal also has `details.amount_in`, the input it spent (the rest of `max_amount_in` is back in the balance), and `details.quote`. A **limit order** is different: `SUCCESS` means funded and resting, not filled (`details.order_id`; see [limit-orders.md](limit-orders.md)) |
 | `REFUNDED` | route refunded the input (`refund_tx_hash`) | done; tell the user |
-| `FAILED` | never executed, or failed with `failure_code` (an unpaid deposit: `deposit_expired`, a day after `expires_at`; a native NEAR transaction NEAR finalized as failed: `native_transaction_failed`) | done; new request needs a new key |
+| `FAILED` | never executed, or failed with `failure_code` (an unpaid deposit: `deposit_expired`, a day after `expires_at`; a native NEAR transaction NEAR finalized as failed: `native_transaction_failed`; a timelocked request queued in a shape the API no longer accepts, such as a withdrawal with a `memo`: `request_no_longer_accepted`, never sent to the provider, so send it again in the current shape under a new key) | done; new request needs a new key |
 | `UNCERTAIN` | outcome not yet proven, **may have executed** | keep polling the same id; never resubmit under a new key |
 | `NEEDS_REVIEW` | automatic settlement stopped | stop; inspect `details.reason`; then `refresh=true` |
 
@@ -70,7 +70,7 @@ GET /v1/status?correlation_id=<id>&wait_ms=30000
   `include_unpaid=true`; read one by its `op_…` id with `GET /v1/status`.
 - `details.request` on an execution's status and history echoes the request as admitted, in the
   request body's field names (`origin_asset`, `destination_asset`, `asset`, `amount`,
-  `min_amount_out`, `chain`, `recipient`, `memo`, `reference`, `note`, `confidential`, each only when it applies; a limit
+  `min_amount_out`, `amount_out`, `max_amount_in`, `chain`, `recipient`, `reference`, `note`, `confidential`, each only when it applies; a limit
   order adds `side`, `price`, `quantity`, `deadline`, with `origin_asset`/`amount` what it spends), so a
   client can show a transfer's recipient or what is reserved per asset. Executions admitted before
   it was recorded have none.
@@ -165,7 +165,7 @@ Idempotency-Key: <the ORIGINAL key>
 { "correlation_id": "op_…", "request": { "type": "withdraw", …the original body, byte-identical after canonicalization… } }
 ```
 
-A limit order is recovered the same way, with `"type": "limit_order"` and its original body.
+A limit order is recovered the same way, with `"type": "limit_order"` and its original body. A swap or withdrawal body is exact input or exact output, as when it was sent.
 Authorization runs again in full: if the grant was revoked, the account frozen or the policy
 tightened since, recovery is refused. `operation_not_recoverable` means it was not eligible (not
 UNCERTAIN, already reached the provider, cross-chain deposit, or another API key);
@@ -175,6 +175,12 @@ the original body and key.
 ## NEEDS_REVIEW
 
 Automatic settlement stopped because something did not add up (e.g. evidence conflicts).
+`failure_code` says why: `provider_review_required` (the provider cannot establish the outcome),
+`provider_partially_failed` (part of the request ran; value may have moved),
+`amount_out_below_minimum` (reported delivery below `details.requested_min_amount_out`),
+`delivered_asset_mismatch` (a withdrawal reported delivering another asset),
+`provider_reply_lost` (the request was sent, but the provider's answer never arrived, so whether it
+ran is unknown), or one of the native codes above. The budget stays charged.
 
 1. Stop polling and stop retrying.
 2. Read `details.reason`; cross-check `GET …/provider/requests`, `…/provider/audit`,
@@ -206,10 +212,10 @@ and for `UNLOGGED`) or list them with `GET …/receipts?type=` ([executions.md](
 With the SDK, `api.getReceipt` / `api.listReceipts` read them. Anyone verifies `item.receipt` with
 `verifyReceipt(receipt, { origin, trusted, readTile })`; a payee owed a transfer or withdrawal uses
 `verifyPaymentReceipt`, with `expect` holding the exact `recipient`, `asset`, `amount` and the
-`reference` it issued (plus `chain` and `memo` for a withdrawal). `expect.confidential` omitted
+`reference` it issued (plus `chain` for a withdrawal; `memo` only for a receipt issued before withdrawals dropped it). Give `expect` exactly one of `amount` and `amount_out`: `amount` matches an exact-input payment, `amount_out` an exact-output withdrawal, which paid the recipient exactly that (the result's `amountOut`, with `maxAmountIn` the most it could spend, and no `amount`; `VerifiedPayment.amount` is optional, SDK 0.9.6). A payee owed an exact figure should ask for an exact-output withdrawal. `expect.confidential` omitted
 accepts a **confidential** payment only, the account's default; pass `confidential: false` to accept
 one paid from the legacy public balance (a withdrawal sent with `confidential: false`). A receipt does
-not prove who paid, and a withdrawal's `amount` is the debit, not what arrived: issue one `reference`
+not prove who paid, and an exact-input withdrawal's `amount` is the debit, not what arrived: issue one `reference`
 per order and accept each `correlation_id` once. `ReceiptNotCoveredError` or `LogUnavailableError`:
 retry with a newer head or later; `NoteError` or `ProofError`: reject. See
 [typescript.md](typescript.md#receipts). Receipts last as long as the audit log (90 days).

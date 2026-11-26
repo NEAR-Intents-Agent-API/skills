@@ -183,12 +183,22 @@ const idempotencyKey = createIdempotencyKey();               // persist with the
 const op = await agent.swap(agentId, { origin_asset: "nep141:wrap.near", destination_asset: usdc, amount }, { idempotencyKey });
 // op: StatusResponseOf<"swap"> & { idempotencyKey }
 
+// Exact output: receive amount_out exactly, spending at most max_amount_in (never with amount / min_amount_out).
+const exactOut = { origin_asset: "nep141:wrap.near", destination_asset: usdc, amount_out: "3000000" };
+const preview = await agent.swap(agentId, { ...exactOut, max_amount_in: mostYouWouldPay, dry: true }); // preview.quote.amount_in; preview.warnings
+const ceiling = ((BigInt(preview.quote.amount_in ?? "0") * 101n) / 100n).toString();         // 1% room above the quote
+await agent.swap(agentId, { ...exactOut, max_amount_in: ceiling }, { idempotencyKey: createIdempotencyKey() });
+// settled: details.amount_in = the input spent; the rest of max_amount_in returns to the balance
+// withdraw takes the same two shapes (amount + min_amount_out?, or amount_out + max_amount_in) and no memo.
+
 const deposit = await api.deposit(agentId, { origin_asset: usdcOnBase }, { idempotencyKey: createIdempotencyKey() });
 // deposit.details: deposit_address, memo?, min_amount, expires_at, refund_to, deposit_seen_at? (SDK 0.7.3)
 ```
 
 Also: `withdraw`, `transfer`, `shield`, `recover(agentId, { correlation_id, request }, { idempotencyKey })`.
 `unshield` is deprecated: the API refuses every request with `public_balance_exit_only`.
+
+A `min_amount_out` above a fresh quote's guaranteed output throws `below_min_amount_out`, and a `max_amount_in` below its `amount_in` throws `above_max_amount_in` (both 409, nothing sent; change the figure, new key); a dry run whose quote already misses the figure warns with the same code. A withdrawal with a `memo` is `validation_failed`, and a public-balance withdrawal to chain `near` takes `amount` alone (SDK 0.9.6).
 
 `confidential` defaults to `true`. `swap`, `placeLimitOrder`, `transfer` and `deposit` throw
 `AgentApiError` with `code: "public_balance_exit_only"` (400, `layer: "request"`, not retryable) for
@@ -231,7 +241,7 @@ retained operations the key admitted (newest first, as `getHistory` entries), `r
 detail was purged after retention (the key stays spent). Both empty is inconclusive; only a same-key,
 same-body replay under the original grant settles it
 ([status-and-recovery.md](status-and-recovery.md#lost-the-response-look-the-key-up)). It needs
-SDK 0.9.3 or later (`npm i @near-intents-agent-api/sdk@^0.9.5` installs the current one), which also types `ApprovalView.votes` and
+SDK 0.9.3 or later (`npm i @near-intents-agent-api/sdk@^0.9.6` installs the current one), which also types `ApprovalView.votes` and
 the `recipient_storage_unregistered` code:
 
 ```ts
@@ -331,6 +341,8 @@ const page = await api.listReceipts(agentId, { type: "transfer", limit: 50 });  
 const payment = await verifyPaymentReceipt(item.receipt!, {
   origin: ORIGIN, trusted: head, readTile: logTileReader("https://log.agentsonintents.com/"),
   expect: { recipient: "shop.near", asset: usdc, amount: "2500000", reference: "order-42" },
+  // an exact-output withdrawal: amount_out instead of amount (exactly one of the two), plus chain;
+  // the result then has amountOut and maxAmountIn, and amount is absent (optional in SDK 0.9.6)
   // confidential omitted = a confidential payment (the default); `confidential: false` accepts one
   // paid from the legacy public balance
 });
@@ -338,7 +350,7 @@ const payment = await verifyPaymentReceipt(item.receipt!, {
 
 `verifyReceipt(receipt, { origin, trusted, readTile })` checks any receipt type and returns its typed
 `terms`. `ReceiptNotCoveredError` and `LogUnavailableError` are retryable; `NoteError` and
-`ProofError` mean reject. A withdrawal receipt proves the debit, not what arrived. See
+`ProofError` mean reject. A withdrawal receipt proves the debit, not what arrived. An exact-output withdrawal's receipt (`terms` hold `amount_out` and `max_amount_in`) is issued only once 1Click reports delivering at least `amount_out`. See
 [status-and-recovery.md](status-and-recovery.md#receipts).
 
 ## Errors

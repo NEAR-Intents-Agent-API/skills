@@ -46,7 +46,7 @@ EvmTypedDataDomain = {                                    // ≥1 domain field, 
 }
 
 Destination =
-  | { action: "withdraw", chain: string, address: string, memo: string | null }   // external chain address
+  | { action: "withdraw", chain: string, address: string, memo: string | null }   // external chain address; sign memo: null (a withdrawal carries no memo, so an entry with one matches nothing)
   | { action: "transfer", address: string, confidential: boolean }                // NEAR Intents account; true in a new policy
 
 Schedule = {
@@ -130,8 +130,9 @@ they carry the same codes in `warnings`.
 
 `destinations` notes:
 - `only` + `[]` (the safe default) keeps funds inside the account: swaps only.
-- `only` matches the **exact** entry, memo included. `except` blocks a listed address by any route: transfers to it,
-  public or confidential, withdrawals to it on any chain under any memo, and native NEAR the agent's NEAR account sends it
+- `only` matches the **exact** entry. Sign every `withdraw` entry with `memo: null`: a withdrawal never carries a
+  memo, so an `only` entry with a memo matches nothing. `except` blocks a listed address by any route: transfers to it,
+  public or confidential, withdrawals to it on any chain, and native NEAR the agent's NEAR account sends it
   (a withdrawal on chain `near`). It is best-effort: another encoding of the same account (TON raw or bounceable, XRP
   X-address, Stellar M-address, Tron hex, BCH legacy) does not match and it cannot stop a payment through an intermediary.
   Use `only` when it matters who receives.

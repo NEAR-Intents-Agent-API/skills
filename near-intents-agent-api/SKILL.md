@@ -128,13 +128,20 @@ owner signs ──► agent_create (policy, optional first grant) ──► gran
    that call's error code (`insufficient_balance` adds `available_amount`). An unlisted asset or an
    invalid recipient refuses the quote itself (`unsupported_token`, `invalid_address`), before any
    provider call and without using an attempt. Read `warnings`
-   before executing. An archived, deleted or frozen account gets no quote: it is refused with the
+   before executing (including `below_min_amount_out` and `above_max_amount_in`: the fresh quote already misses the floor or ceiling you sent).
+   `swap` and `withdraw` are **exact input** (`amount`, optionally `min_amount_out`) or **exact output**
+   (`amount_out` with `max_amount_in`, never with `amount`/`min_amount_out`): `{"asset":"<usdc>","chain":"base","recipient":"0xabc…","amount_out":"5000000","max_amount_in":"5200000"}`.
+   The whole `max_amount_in` is held and counted against limits and the USD budget; unused input returns. A withdrawal takes no `memo`.
+   See [references/executions.md](references/executions.md#exact-input-or-exact-output).
+   An archived, deleted or frozen account gets no quote: it is refused with the
    code the live request gets (`agent_archived`, `agent_deleted`, `wallet_frozen`).
 5. **Observe** — `GET /v1/status?correlation_id=…&wait_ms=30000` until it stops moving. A limit order
    that reached `SUCCESS` is resting, not filled: follow it with `GET /v1/agents/{agent_id}/limit-orders/{order_id}`.
    A completed transfer, withdrawal, swap, limit order or deposit also has a receipt:
    `GET /v1/agents/{agent_id}/operations/{correlation_id}/receipt`, or `GET …/receipts` for the list
    ([references/executions.md](references/executions.md#reference-note-and-receipts)).
+   A receipt's terms are exact input (`amount`, `min_amount_out?`) or exact output (`amount_out`,
+   `max_amount_in`); a payee verifying an exact-output withdrawal passes `expect.amount_out`.
 
 Every owner action (policy edits, freeze, grant revoke, approval votes, cancel, delete) is the
 same generate → sign → submit → status loop.
@@ -182,7 +189,9 @@ The Python and Rust signers are verified byte-for-byte against near-api-js and v
 - Never compute what the agent can spend yourself: read `available` / `available_raw` on
   `GET …/balances` (balance less queued or timelocked work not yet dispatched). Read `amount_out`
   only at `SUCCESS` (or `REFUNDED` after a partial fill); before then the figure is
-  `expected_amount_out`.
+  `expected_amount_out`. A settled exact-output request also has `details.amount_in`, the input it spent,
+  and `details.quote`.
+- Sign every `withdraw` entry in a policy's `destinations` with `memo: null`: a withdrawal never carries a memo, so an `only` entry with one matches nothing.
 - Writes against mainnet move real money: build in dry-run/quote mode first and gate live
   execution behind an explicit flag, as the examples do (`AGENT_ALLOW_WRITES`, `AGENT_EXECUTE`).
 - Do not invent endpoints or fields. If unsure, fetch `/openapi.json` or `/llms.txt` from the

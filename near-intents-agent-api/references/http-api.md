@@ -113,16 +113,21 @@ a receipt with the SDK ([status-and-recovery.md](status-and-recovery.md#receipts
 
 | Path | Auth | Body |
 |---|---|---|
-| `/swap` | key, grant, idem | `origin_asset`, `destination_asset`, `amount`, `min_amount_out?`, `confidential?`, `note?`, `dry?` |
+| `/swap` | key, grant, idem | `origin_asset`, `destination_asset`, then `amount`, `min_amount_out?` (exact input) or `amount_out`, `max_amount_in` (exact output), `confidential?`, `note?`, `dry?` |
 | `/limit-orders` | key, grant, idem | `base_asset`, `quote_asset`, `side` (`sell`\|`buy`), `quantity` (atomic base), `price` (decimal string, quote per whole base), `deadline?` (RFC 3339, ≤ 7 days), `confidential?`, `note?`, `dry?` |
 | `/limit-orders/{order_id}/cancel` → 200 | key, grant | none; returns the order (fields optional, `{}` possible) |
 | `/limit-orders/cancel-all` → 200 | key, grant | none; `{ known, cancelled, failed, remaining, complete }`, at most 50 per call |
-| `/withdraw` | key, grant, idem | `asset`, `amount`, `chain`, `recipient`, `memo?`, `reference?`, `confidential?`, `note?`, `async?`, `dry?` |
+| `/withdraw` | key, grant, idem | `asset`, `chain`, `recipient`, then `amount`, `min_amount_out?` (exact input) or `amount_out`, `max_amount_in` (exact output), `reference?`, `confidential?`, `note?`, `async?`, `dry?`; no `memo` (`validation_failed`) |
 | `/transfer` | key, grant, idem | `asset`, `amount`, `recipient` (NEAR Intents account; a named one must exist on NEAR, else `invalid_address`; to pay another agent, its `wallet.near_account_id`, never its `agent_id`: funds sent there are lost), `reference?`, `confidential?`, `note?` |
 | `/shield` | key, grant, idem | `asset`, `amount` (public → confidential) |
 | `/unshield` | key | `asset`, `amount`; refused: every request is `public_balance_exit_only` |
 | `/deposit` | key, idem | `origin_asset`, `destination_asset?`, `amount?`, `confidential?`, `note?` |
 | `/recover` | key, grant, idem (original) | `correlation_id`, `request: { type, …original body }` |
+
+Swap and withdraw take exact input (`amount`, optionally `min_amount_out`) or exact output
+(`amount_out` with `max_amount_in`), never both; see [executions.md](executions.md#exact-input-or-exact-output).
+Amounts are digits only, with no sign or leading zeros. A fresh quote that misses `min_amount_out` or
+`max_amount_in` refuses with `below_min_amount_out` or `above_max_amount_in` (409, nothing sent).
 
 `confidential` defaults to `true` everywhere. `confidential: false` is refused with
 `public_balance_exit_only` (400, layer `request`, not retryable, live and `dry`) on `/swap`,
@@ -286,7 +291,7 @@ reads `PROCESSING`, with `details.provider_status` keeping the provider's own st
 
 | type | details |
 |---|---|
-| executions, `deposit`, `agent_delete` | `action`, `request?` (the request as admitted, in the request body's field names: optional `origin_asset`, `destination_asset`, `asset`, `amount`, `min_amount_out`, `chain`, `recipient`, `memo`, `reference`, `note`, `side`, `price`, `quantity`, `deadline` (the last four for limit orders), `confidential`; `confidential` is the balance it spends from, or for a deposit credits), `near_account_id?`, `provider_request_id?`, `chain?`, `execute_after?`, `delay_ms?`, `approval_id?`, `intent_hash?`, `tx_hash?`, `destination_tx_hash?`, `amount_out?`, `order_id?` (limit order: the resting order's id), `usd_value?` (the API's USD valuation at dispatch), `available_amount?` (a FAILED `insufficient_balance` / `custody_native_balance_required`), `deposit_address?`, `memo?`, `min_amount?`, `min_amount_out?`, `expires_at?`, `deposit_seen_at?` (deposit: first sighting of funds), `refund_to?`, `refund_tx_hash?`, `failure_reason?`, `reason?` (NEEDS_REVIEW), `never_executed?`, `never_submitted?`, `settled_late?`, + provider fields |
+| executions, `deposit`, `agent_delete` | `action`, `request?` (the request as admitted, in the request body's field names: optional `origin_asset`, `destination_asset`, `asset`, `amount`, `min_amount_out`, `amount_out`, `max_amount_in`, `chain`, `recipient`, `reference`, `note`, `side`, `price`, `quantity`, `deadline` (the last four for limit orders), `confidential`; `confidential` is the balance it spends from, or for a deposit credits), `near_account_id?`, `provider_request_id?`, `chain?`, `execute_after?`, `delay_ms?`, `approval_id?`, `intent_hash?`, `tx_hash?`, `destination_tx_hash?`, `amount_out?` (delivered, only at settlement), `expected_amount_out?` (the estimate until then), `amount_in?` (exact output, at `SUCCESS`: the input spent), `quote?` (the quote it ran with: `amount_in`, `min_amount_in`, `amount_out`, `min_amount_out`, `withdraw_fee`, `refund_fee`, `amount_in_usd`, `amount_out_usd`), `order_id?` (limit order: the resting order's id), `usd_value?` (the API's USD valuation at dispatch), `available_amount?` (a FAILED `insufficient_balance` / `custody_native_balance_required`), `deposit_address?`, `memo?`, `min_amount?`, `min_amount_out?`, `expires_at?`, `deposit_seen_at?` (deposit: first sighting of funds), `refund_to?`, `refund_tx_hash?`, `failure_reason?`, `reason?` (NEEDS_REVIEW), `never_executed?`, `never_submitted?`, `settled_late?`, + provider fields |
 | `agent_create` | `agent_id`, `revision`, `policy_hash`, `transaction_hash`, `grant` (`{ grant_id, label, credential_type }` the signature also authorized, or `null`), `grant_install` (`"installed"` \| `"refused:grant_credential_reused"` \| `"refused:grant_expired"`; `null` without a grant or before the agent is created). The agent exists on `SUCCESS` whatever `grant_install` says; the grant can act only when it is `"installed"` |
 | `policy_update`, `agent_freeze`, `agent_unfreeze` | `revision`, `policy_hash`, `transaction_hash` (null when the revision applied without a blockchain transaction) |
 | `grant_issue` | `grant: GrantView \| null` |

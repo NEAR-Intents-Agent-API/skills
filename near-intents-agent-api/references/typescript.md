@@ -241,7 +241,7 @@ retained operations the key admitted (newest first, as `getHistory` entries), `r
 detail was purged after retention (the key stays spent). Both empty is inconclusive; only a same-key,
 same-body replay under the original grant settles it
 ([status-and-recovery.md](status-and-recovery.md#lost-the-response-look-the-key-up)). It needs
-SDK 0.9.3 or later (`npm i @near-intents-agent-api/sdk@^0.9.5` installs the current one), which also types `ApprovalView.votes` and
+SDK 0.9.3 or later (`npm i @near-intents-agent-api/sdk@^0.9.6` installs the current one), which also types `ApprovalView.votes` and
 the `recipient_storage_unregistered` code:
 
 ```ts

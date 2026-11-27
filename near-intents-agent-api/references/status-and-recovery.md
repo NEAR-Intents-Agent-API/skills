@@ -222,11 +222,14 @@ retry with a newer head or later; `NoteError` or `ProofError`: reject. See
 
 ## Revocation and freezing vs in-flight work
 
-`dispatch_committed_at` is the point of no return. Before it, revoking the grant, revoking the
-API key or freezing refuses the operation. After it, the operation completes; `grant_revoke`
-details and API-key revocation list those committed ids.
+`dispatch_committed_at` is the point of no return. Before it, revoking the grant (the owner's
+`grant_revoke`, or your API key's `revokeGrant` / `revokeAllGrants`), revoking the API key or
+freezing refuses the operation. After it, the operation completes; the `grant_revoke` details, a
+partner revoke's `committed_correlation_ids` and API-key revocation list those committed ids.
 
 The same holds for signatures. A native signing route returns its signature to the caller, so
 revoking, freezing or deleting afterwards cannot recall it: a `sign-intent` payload signed before
 the freeze stays publishable by anyone who holds it until its own `deadline` (up to 300 s, or 96 h
-for a payload that pays only 1Click deposits), see [sign-intent.md](sign-intent.md).
+for a payload that pays only 1Click deposits), see [sign-intent.md](sign-intent.md). A freeze does void
+a `payout_authorize` not yet used (`FAILED`, `payout_authorization_voided`), but not a payload already
+signed under one.

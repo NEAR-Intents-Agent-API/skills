@@ -118,14 +118,42 @@ activity feeds and audits.
 
 ## Revoke
 
+Your backend revokes grants with the API key alone; no owner signature, no wallet:
+
+```ts
+const one = await api.revokeGrant(agentId, grantId);   // POST /v1/agents/{agent_id}/grants/{grant_id}/revoke
+// { grant, committed_correlation_ids, committed_cancellations, committed_truncated }
+const all = await api.revokeAllGrants(agentId);        // POST /v1/agents/{agent_id}/grants/revoke
+// { data: [grants this call revoked], committed_correlation_ids, … }
+```
+```python
+api.revoke_grant(agent_id, grant_id)                   # Python asset; revoke_all_grants(agent_id) for all
+```
+
+- The grant reads `revoked_reason: "partner_revoked"` (an owner's `grant_revoke` reads
+  `owner_revoked`). Its token and sessions are refused at once with `agent_grant_required` (403);
+  an `X-Grant-Proof` for it with `grant_proof_invalid` (401).
+- Work already committed finishes and is listed in `committed_correlation_ids` (`committed_truncated`
+  if the list was cut); `committed_cancellations` lists limit-order cancels that may still reach the
+  provider. Monitor those operations: one waiting for owner approval with no vote fails
+  `authorization_stale`.
+- Revoking a revoked or expired grant answers 200 with it unchanged. `revokeAllGrants` revokes only
+  live grants and returns an empty `data` when there are none. Works on archived agents; a deleted
+  agent is `agent_deleted` (409), another partner's agent `agent_not_found`, a grant of another agent
+  `grant_not_found`.
+- Freezing and issuing grants stay with the owner. The API key has no scopes: any key of yours can
+  revoke every grant on every agent, so treat it as the kill switch and keep it out of workloads and CI.
+
+The owner can revoke too, with a signed intent:
+
 ```json
 { "type": "grant_revoke", "agent_id": "…", "grant_id": "<64 hex>" }
 ```
 
-Takes effect for anything not yet dispatched. Operations already past the dispatch commit finish;
-`details.committed_correlation_ids` lists them (`committed_truncated` if the list was cut).
-`details.committed_cancellations` lists limit-order cancels made with the grant that may still reach
-the provider (`{ order_id, committed_at }`, `order_id` null for cancel-all): read those orders. A limit
+Either path takes effect for anything not yet dispatched. Operations already past the dispatch
+commit finish; the owner path lists them in `details.committed_correlation_ids`
+(`committed_truncated` if the list was cut) and `details.committed_cancellations` (`{ order_id,
+committed_at }`, `order_id` null for cancel-all): read those orders. A limit
 order already resting stays on the book: revoking the placing grant does not cancel it, and
 cancelling needs a live grant (any of the account's), so keep one that can.
 Expired grants stop working by themselves.
@@ -143,8 +171,9 @@ grant signed with the agent) and `GET /v1/agents/{id}/containment` (live grants 
 | Long-running bot | one grant per bot deployment, rotate (issue new, then revoke old) every N months |
 | CI job or cloud workload | `oidc` grant pinning its immutable ids; no token to store ([workload-identity.md](workload-identity.md)) |
 | Third-party integration (MCP client, partner tool) | its own grant so it can be cut off alone |
-| User says "stop that assistant" | `grant_revoke` that one grant |
-| User says "stop everything" | `agent_freeze` |
+| User says "stop that assistant" | `revokeGrant` that one grant (no signature needed) |
+| Suspected leak or offboarding: cut off every session at once | `revokeAllGrants`; the policy and the owner's wallet are untouched |
+| User says "stop everything" | `agent_freeze` (owner-signed) |
 | Agent needs a new capability | `policy_update`; do **not** issue a new grant (grants carry no permissions) |
 
 Errors: `agent_grant_required` (403: missing, unknown, revoked, expired or other agent's token),

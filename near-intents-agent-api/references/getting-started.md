@@ -89,7 +89,8 @@ Content-Type: application/json
 
 Response (201): `correlation_id` (`intent_…`), `agent_id`, `expires_at`, `signer`,
 `intent: { standard, payload }`, `preview: { summary, policy, … }` (a passkey owner's preview also
-carries `wallet_request`, the request its WebAuthn challenge hashes).
+carries what its WebAuthn challenge hashes, `wallet_request` or `offchain_message`: recompute the
+challenge from it before the owner signs, [signing.md](signing.md#webauthn--passkey-owners)).
 
 1. Show `preview.summary` and the policy to the owner.
 2. The owner's wallet signs `intent.payload` unchanged (method by `intent.standard`, see

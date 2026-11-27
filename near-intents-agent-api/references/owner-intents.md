@@ -23,8 +23,9 @@ The API builds the exact bytes, so the partner never assembles anything security
 | `agent_archive` / `agent_restore` | — | hides/unhides from default lists; nothing changes on chain. `agent_archive` needs a frozen account, and `agent_restore` needs an unfrozen one; otherwise `pause_before_archive` / `unpause_before_restore` |
 | `agent_delete` | — | `preview.deletion` lists balances and `assets_lost`; withdraw first, there is no sweep. `open_limit_orders` counts resting limit orders; while any is not payout-final it is refused with `limit_orders_open` (checked before `deletion_assets_remaining`): cancel them, or freeze, which cancels them, and let them settle. It does not read the custody account's native NEAR (that goes to the sponsor, `beneficiary`) and does not inventory native accounts (native NEAR, EVM, Solana): tell the owner to move native funds first. Any public or confidential balance refuses it (`deletion_assets_remaining`), whatever the preview showed when the owner signed. The API reads the balances again right before it commits: funds that arrived since fail the deletion with `deletion_assets_remaining`, an unreadable balance with `provider_unavailable`. Both are recorded `failed`, nothing is retired and the agent stays archived and restorable. A signature from a deletion that was later restored is refused with `owner_command_stale`: sign again. Open deposit addresses never block it: deletion closes them (`agent_deleted`), and funds sent later are lost |
 | `grant_issue` | `label`, `credential` (sha256 hex of token, or an `oidc` / `public_key` object), `expires_at` (≤365 days) | see [grants.md](grants.md) |
-| `grant_revoke` | `grant_id` | committed operations still finish |
+| `grant_revoke` | `grant_id` | committed operations still finish. Your API key can revoke a grant with no signature: [grants.md](grants.md#revoke) |
 | `execution_cancel` | `correlation_id` of a `QUEUED` op | only while the timelock holds it |
+| `payout_authorize` | `key: "evm" \| "solana"`, `payout: { origin_asset, amount_in, destination_asset, min_amount_out, recipient, recipient_type }`, `valid_until` | one 1Click deposit the key may pay through `sign-intent` outside `sign_intent.receivers` / `withdrawals`: [sign-intent.md](sign-intent.md#paying-one-deposit-the-owner-signed). `amount_in` is a ceiling, `min_amount_out` a floor, `valid_until` 5 minutes to 24 hours ahead; `preview.payout` shows the terms with the chain the API read |
 | `approval_vote` | `approval_id`, `verdict: "approve" \| "reject"` | any owner; EVM/passkey votes go through their `0s` wallet |
 
 ## Generate response
@@ -43,10 +44,21 @@ The API builds the exact bytes, so the partner never assembles anything security
     deletion?: { near_account_id, beneficiary, public[], confidential[], open_limit_orders, assets_lost, retirement },
     approval?: { approval_id, request_type, request_hash, verdict },
     grant?: { grant_id, owner_message },        // agent_create with `grant`: the grant the signature also authorizes
-    wallet_request?: object                     // passkey: the request the WebAuthn challenge hashes
+    payout?: { origin_asset, amount_in, destination_asset, min_amount_out, recipient, recipient_type, key, chain, valid_until },   // payout_authorize
+    wallet_request?: object,                    // passkey, wallet-request steps: what the WebAuthn challenge hashes
+    offchain_message?: { chain_id, signer_id, timestamp, payload, path? }   // passkey, consent steps: what the challenge hashes
   }
 }
 ```
+
+**Passkey owners sign a hash.** Every `webauthn` intent carries exactly one preimage in its preview
+(NEAR and EVM intents carry none): `wallet_request` (NEP-616) for steps the wallet contract runs,
+`offchain_message` (NEP-641) for consent steps: `grant_issue`, `grant_revoke`, a local
+`policy_update`, `execution_cancel`, `agent_archive` / `agent_restore`, `approval_vote` and
+`payout_authorize`. On your backend, before the owner signs, recompute the challenge from it and compare
+it to `intent.payload.challenge`, then check the content against what you asked for
+([signing.md](signing.md#webauthn--passkey-owners); TypeScript: `verifyPasskeyChallenge(generated)`).
+`offchain_message.payload` is the same text a NEAR owner signs as the `nep413` `message`.
 
 The SDK and the reference clients also return the idempotency key they used. If
 `generate-intent` is interrupted (timeout, crash), retry with the **same** `Idempotency-Key`;
@@ -93,7 +105,7 @@ to a minute; off-chain ones settle almost immediately.
 
 | Owner | Change enforced by provider (on chain) | Change enforced by API (off chain) |
 |---|---|---|
-| NEAR | `nep366` delegate action (sponsor pays gas): `agent_create`, provider policy edits, freeze/unfreeze | `nep413`: destinations/budget/timelock/schedule/`limit_order.max_deviation_bps`-only edits, grants, cancel, archive, votes, … |
+| NEAR | `nep366` delegate action (sponsor pays gas): `agent_create`, provider policy edits, freeze/unfreeze | `nep413`: destinations/budget/timelock/schedule/`limit_order.max_deviation_bps`-only edits, grants, cancel, archive, votes, payout authorizations, … |
 | EVM | `eip712` | `eip712` |
 | Passkey | `webauthn` | `webauthn` |
 
@@ -121,6 +133,8 @@ Rules:
 - Let the browser only *forward* the wallet output; don't let it supply a different `payload`
   (the API refuses mismatches with `intent_payload_mismatch` anyway).
 - Show `preview.summary`, the full `preview.policy`, and for deletes `preview.deletion.assets_lost`.
+- For a `webauthn` intent, verify the challenge against its preimage before the browser sees it, and
+  refuse an intent that carries none.
 
 Browser signing:
 
@@ -186,7 +200,8 @@ poll GET …/policy until status APPLIED && provider_policy_synced
 ```
 
 **Emergency stop**: `agent_freeze` (no cooldown, takes effect at once). To stop one actor only,
-`grant_revoke`. To see what is still live: `GET …/containment`. A freeze refuses new requests but
+`grant_revoke`, or revoke it with your API key alone ([grants.md](grants.md#revoke)), which needs no
+signature and so also works when the owner is not around. To see what is still live: `GET …/containment`. A freeze refuses new requests but
 cannot recall a signature already returned: a `sign-intent` payload signed earlier stays
 publishable until its deadline (up to 96 h for a 1Click deposit payload). Tell the owner so.
 

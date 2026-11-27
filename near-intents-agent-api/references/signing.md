@@ -123,6 +123,27 @@ const credential = await startAuthentication({ optionsJSON: intent.payload });
 signed_data = { ...intent, credential };
 ```
 
+The authenticator signs only `payload.challenge`, a hash, so the owner cannot read what they approve.
+The preview therefore carries the message it hashes, exactly one of two:
+
+| `preview.…` | Steps | `challenge` = base64url, no padding, of |
+|---|---|---|
+| `wallet_request` (NEP-616) | wallet-contract calls: `agent_create`, provider policy edits, freeze/unfreeze, delete | `sha3_256("NEAR_WALLET_CONTRACT/V1" \|\| borsh(wallet_request))` |
+| `offchain_message` `{ chain_id, signer_id, timestamp, payload, path? }` (NEP-641) | consent steps: `grant_issue`, `grant_revoke`, local `policy_update`, `execution_cancel`, `agent_archive`, `agent_restore`, `approval_vote`, `payout_authorize` | `sha3_256("NEAR_NEP641_OFFCHAIN_MESSAGE/V1" \|\| borsh(offchain_message))` |
+
+Borsh for `offchain_message`, in field order: `chain_id` string, `signer_id` string, `path` list of
+strings (u32 count, then each string; the response omits an absent `path`, hash exactly the fields you
+received), `timestamp` u64 nanoseconds since the Unix epoch (the ISO fraction included), `payload`
+string. A string is a u32 byte length then UTF-8 bytes; integers are little-endian.
+
+Before the owner signs, recompute the challenge, compare it to `intent.payload.challenge`, and check
+the content against your request. `offchain_message.payload` is the text a NEAR owner signs in
+`nep413` `message` and an EVM owner in the `eip712` payload: canonical JSON of the owner message
+(parse it and check its fields), except `approval_vote`, the plain string
+`verdict:approval_id:wallet_pubkey:request_hash` (build the expected string and compare the whole
+value; `wallet_pubkey` contains a colon). TypeScript: `verifyPasskeyChallenge(generated)` checks
+either preimage; `offchainMessageChallenge` and `walletRequestChallenge` compute one challenge.
+
 Registration: ES256 (`alg: -7`), user verification required; store the credential id and the
 **SPKI DER** public key (base64url), `rp_id` and exact `origin`. Convert COSE keys to SPKI in
 your backend. Cross-origin iframes are rejected.

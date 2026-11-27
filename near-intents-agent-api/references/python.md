@@ -26,7 +26,7 @@ tokens = {t["asset_id"]: t for t in api.get_tokens()}
 
 Methods: `generate_intent`, `submit_intent`, `get_status(cid, wait_ms, refresh)`,
 `wait_for_status(cid, deadline_s)`, `list_agents`, `get_agent`, `get_balances(agent_id, source="confidential", asset)`,
-`get_policy`, `list_grants`, `get_history`, `list_scheduled`, `list_approvals`,
+`get_policy`, `list_grants`, `revoke_grant`, `revoke_all_grants` (API key alone, no owner signature), `get_history`, `list_scheduled`, `list_approvals`,
 `get_containment`, `quote_swap`, `quote_withdraw`, `swap`, `withdraw`, `transfer`, `shield`,
 `unshield` (always refused), `deposit`, `recover`, the limit-order methods (`quote_limit_order`, `place_limit_order`,
 `list_limit_orders`, `get_limit_order`, `cancel_limit_order`, `cancel_all_limit_orders`), plus the generic `request(method, path, query=, body=, idempotency_key=, grant=)`
@@ -295,8 +295,9 @@ except AgentApiRequestError as e:
 
 The native routes (`sign-intent`, `sign-in`, `sign-transfer`) have no wrapper in the asset: call
 `api.for_grant(token).request("POST", f"/v1/agents/{agent_id}/native/evm/sign-intent", body={"payload": payload}, grant=True)`;
-when the payload pays a 1Click deposit address, add `"one_click_quotes": [quote]` (1Click's live quote answer, unchanged)
-([sign-intent.md](sign-intent.md)).
+when the payload pays a 1Click deposit address, add `"one_click_quotes": [quote]` (1Click's live quote answer, unchanged);
+for a payout the owner authorized, add `"payout_authorization_id": authorization["correlation_id"]`
+(a signed `payout_authorize` intent, generated with `generate_intent`) ([sign-intent.md](sign-intent.md#paying-one-deposit-the-owner-signed)).
 
 ## Async / frameworks
 

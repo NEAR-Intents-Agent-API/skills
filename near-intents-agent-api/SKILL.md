@@ -12,7 +12,7 @@ partner API key and never touches anyone's private keys.
 
 | Party | Credential | Does |
 |---|---|---|
-| **Partner** (your backend) | Partner API key (`X-API-Key`) from the [partner portal](https://partners.near-intents.org/) | Calls every endpoint, prepares owner actions, stores grants |
+| **Partner** (your backend) | Partner API key (`X-API-Key`) from the [partner portal](https://partners.near-intents.org/) | Calls every endpoint, prepares owner actions, stores and revokes grants |
 | **Owner** (end user) | Their wallet: NEAR account, EVM key or passkey | Signs: create account, policy, grants, freeze, approve, delete |
 | **Agent** (assistant, bot, session) | Grant token `ngt_…` (held by your backend), or a federated identity: `ngs_…` session / `X-Grant-Proof` | Moves money inside the owner's policy |
 
@@ -61,7 +61,8 @@ Follow these in every integration; most bugs and lost-fund incidents come from b
 10. **Funds go only to `details.deposit_address`.** A `correlation_id` (`op_…`/`intent_…`) is a
     tracking id, never an address.
 11. **One grant per session/assistant/bot.** Grants say *who* may act; the account policy says
-    *what*. Revoke a grant to cut off one agent; `agent_freeze` stops everyone.
+    *what*. Revoke a grant to cut off one agent: your API key alone can (`revokeGrant`,
+    `revokeAllGrants`, no owner signature); `agent_freeze` stops everyone and stays owner-signed.
 12. **A returned signature cannot be recalled.** `agent_freeze` refuses new `native` requests, but a
     `sign-intent` payload signed before it stays publishable by anyone who holds it until its own
     deadline (300 s, or up to 96 h when it pays only 1Click deposits). Treat the payload like cash,
@@ -143,8 +144,10 @@ owner signs ──► agent_create (policy, optional first grant) ──► gran
    A receipt's terms are exact input (`amount`, `min_amount_out?`) or exact output (`amount_out`,
    `max_amount_in`); a payee verifying an exact-output withdrawal passes `expect.amount_out`.
 
-Every owner action (policy edits, freeze, grant revoke, approval votes, cancel, delete) is the
-same generate → sign → submit → status loop.
+Every owner action (policy edits, freeze, grant issue and revoke, approval votes, cancel, payout
+authorization, delete) is the same generate → sign → submit → status loop. For a passkey owner,
+check the challenge against the preview's preimage before the owner signs
+([references/signing.md](references/signing.md#webauthn--passkey-owners)).
 
 ## Pick your language path
 
@@ -165,14 +168,14 @@ The Python and Rust signers are verified byte-for-byte against near-api-js and v
 | Understand accounts, policy vs grant, who enforces what | [references/concepts.md](references/concepts.md) |
 | Every endpoint, header, shape, pagination | [references/http-api.md](references/http-api.md) |
 | Run owner actions, previews, expiry, cooldowns, BFF split | [references/owner-intents.md](references/owner-intents.md) |
-| Sign `nep413` / `nep366` / `eip712` / `webauthn` correctly | [references/signing.md](references/signing.md) |
+| Sign `nep413` / `nep366` / `eip712` / `webauthn` correctly, and verify a passkey challenge against its preimage | [references/signing.md](references/signing.md) |
 | Write or edit a policy (actions, limits, destinations, USD budget, limit-order price bound, timelock, schedule, approval) | [references/policy.md](references/policy.md) |
-| Issue, use, store, revoke grants; pick a credential kind (`token` / `oidc` / `public_key`) | [references/grants.md](references/grants.md) |
+| Issue, use, store, revoke grants (owner-signed or by your API key alone); pick a credential kind (`token` / `oidc` / `public_key`) | [references/grants.md](references/grants.md) |
 | Give a CI job, cloud workload or key-holding server a grant with no long-lived secret (GitHub Actions, GitLab, GCP, AWS, Kubernetes, Entra, Vercel, KMS; exchange, `X-Grant-Proof`) | [references/workload-identity.md](references/workload-identity.md) |
 | Swap, transfer, withdraw, deposit, shield, quotes, chains, `reference` / `note`, receipts | [references/executions.md](references/executions.md) |
 | Place, follow and cancel limit orders (resting orders, price bound, containment, delete guard) | [references/limit-orders.md](references/limit-orders.md) |
 | Statuses, polling, idempotency, finding an operation by its key after a lost response, `UNCERTAIN`, `/recover`, operation proofs, verifying receipts | [references/status-and-recovery.md](references/status-and-recovery.md) |
-| Sign NEAR Intents payloads, Solana logins or transfers with the agent's EVM/Solana key (`sign-intent`, `sign-in`, `sign-transfer`) | [references/sign-intent.md](references/sign-intent.md) |
+| Sign NEAR Intents payloads, Solana logins or transfers with the agent's EVM/Solana key (`sign-intent`, `sign-in`, `sign-transfer`); let the owner authorize one payout outside the standing lists (`payout_authorize`) | [references/sign-intent.md](references/sign-intent.md) |
 | Handle an error code | [references/errors.md](references/errors.md) |
 | Design the integration (data model, AI tools, key ownership models, security) | [references/architecture.md](references/architecture.md) |
 | Find a runnable example for a flow | [references/examples.md](references/examples.md) |

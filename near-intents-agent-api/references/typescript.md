@@ -51,6 +51,24 @@ let status = await api.getStatus(generated.correlation_id, { waitMs: 30_000 });
 
 Typed narrowing: `GenerateIntentResponseOf<"policy_update">`, `StatusResponseOf<"swap">`, `StatusResponseOf<"limit_order">`.
 
+SDK 0.9.7. A `webauthn` intent signs only a hash, so its preview carries what the hash covers:
+`preview.wallet_request` (NEP-616 wallet-request steps) or `preview.offchain_message` (NEP-641 consent
+steps: `grant_issue`, `grant_revoke`, a local `policy_update`, `execution_cancel`, `agent_archive`,
+`agent_restore`, `approval_vote`, `payout_authorize`); NEAR and EVM intents carry neither. Check it on
+your backend before the owner signs:
+
+```ts
+import { verifyPasskeyChallenge, offchainMessageChallenge, walletRequestChallenge } from "@near-intents-agent-api/sdk";
+
+if (generated.intent.standard === "webauthn" && !verifyPasskeyChallenge(generated))
+  throw new Error("the passkey challenge does not hash the previewed message");   // false also when no preimage came
+// by hand: offchainMessageChallenge(preview.offchain_message) or walletRequestChallenge(preview.wallet_request)
+// must equal generated.intent.payload.challenge; then compare the preimage's content (its `payload`) with your request
+```
+
+`GenerateIntentResponse` is a union by preview: narrow before reading a preimage,
+`"wallet_request" in generated.preview` or `"offchain_message" in generated.preview`.
+
 ## The first grant, in the same signature as the agent
 
 SDK 0.9.5. `agent_create` takes an optional `grant` with the terms of `grant_issue` (`label`,
@@ -108,6 +126,18 @@ const g = await api.generateIntent({
 
 const agent = api.forGrant(token);                         // one client per grant; takes ngt_ or ngs_
 ```
+
+Revoking needs no owner signature (SDK 0.9.7): the API key alone does it, and the grant reads
+`revoked_reason: "partner_revoked"` ([grants.md](grants.md#revoke)).
+
+```ts
+const { grant, committed_correlation_ids, committed_cancellations, committed_truncated } =
+  await api.revokeGrant(agentId, grantId);      // the grant is returned unchanged if already revoked or expired
+const { data: revoked } = await api.revokeAllGrants(agentId);   // every live grant; `data` is empty when none was live
+```
+
+Its next request fails `agent_grant_required`, and its sessions end with it. Committed work finishes:
+follow `committed_correlation_ids` with `getStatus`. Issuing a grant and freezing stay owner intents.
 
 ## Workload identity
 
@@ -241,7 +271,7 @@ retained operations the key admitted (newest first, as `getHistory` entries), `r
 detail was purged after retention (the key stays spent). Both empty is inconclusive; only a same-key,
 same-body replay under the original grant settles it
 ([status-and-recovery.md](status-and-recovery.md#lost-the-response-look-the-key-up)). It needs
-SDK 0.9.3 or later (`npm i @near-intents-agent-api/sdk@^0.9.6` installs the current one), which also types `ApprovalView.votes` and
+SDK 0.9.3 or later (`npm i @near-intents-agent-api/sdk@^0.9.7` installs the current one), which also types `ApprovalView.votes` and
 the `recipient_storage_unregistered` code:
 
 ```ts
@@ -269,7 +299,7 @@ const sent = await agent.nativeNearTransfer(agentId, { to: "bob.near", amount: "
 
 Also `nativeNearCall`, `nativeEvmSignMessage`, `nativeEvmSignTransaction`,
 `nativeSolanaSignMessage`, `nativeSolanaSignTransaction`. SDK 0.7.4 adds
-`nativeEvmSignIntent` / `nativeSolanaSignIntent(agentId, { payload, one_click_quotes? })` → `IntentSignature`
+`nativeEvmSignIntent` / `nativeSolanaSignIntent(agentId, { payload, one_click_quotes?, payout_authorization_id? })` → `IntentSignature`
 (`signed_data` to publish as is), `nativeSolanaSignIn(agentId, SolanaSignInRequest)` →
 `SolanaSignIn` (adds `signed_message`) and `nativeSolanaSignTransfer(agentId, { unsigned_tx, recipient })`
 → `NativeSignature`; policy types `SignIntentRules`, `EvmSignIntentRequest`,
@@ -282,6 +312,25 @@ const { signed_data } = await agent.nativeEvmSignIntent(agentId, { payload });  
 // a payload that pays a 1Click deposit address: also the live quote (dry: false), whole and unchanged
 // await agent.nativeEvmSignIntent(agentId, { payload, one_click_quotes: [quote] });
 ```
+
+SDK 0.9.7 adds `payout_authorization_id`: to pay one 1Click deposit that `receivers` and `withdrawals` do
+not allow, the owner signs a `payout_authorize` intent (`PayoutAuthorizeRequest`; `preview.payout` is a
+`PayoutPreview`) and the agent sends its `correlation_id`:
+
+```ts
+const authorization = await api.generateIntent({
+  type: "payout_authorize", agent_id: agentId, key: "evm",
+  payout: { origin_asset, amount_in /* ceiling */, destination_asset, min_amount_out /* floor */,
+            recipient, recipient_type: "DESTINATION_CHAIN" },
+  valid_until: new Date(Date.now() + 3_600_000).toISOString(),   // 5 minutes to 24 hours ahead
+});
+// the owner signs authorization.intent, you submit it; its status is PROCESSING until used
+await agent.nativeEvmSignIntent(agentId, { payload, one_click_quotes: [quote],
+  payout_authorization_id: authorization.correlation_id });
+```
+
+Rules, status and refusals (`payout_authorization_invalid`, `payout_authorization_expired`,
+`payout_authorization_voided`, `payout_authorization_refused`): [sign-intent.md](sign-intent.md#paying-one-deposit-the-owner-signed).
 
 Rules, 1Click deposit checks, refusals and the freeze caveat: [sign-intent.md](sign-intent.md).
 Signing methods return the signature and

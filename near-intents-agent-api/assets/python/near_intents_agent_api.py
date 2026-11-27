@@ -231,6 +231,15 @@ class AgentApi:
     def list_grants(self, agent_id: str) -> list[dict[str, Any]]:
         return self.request("GET", f"/v1/agents/{agent_id}/grants")["data"]
 
+    def revoke_grant(self, agent_id: str, grant_id: str) -> dict[str, Any]:
+        """API key alone, no owner signature: `{"grant", "committed_correlation_ids", "committed_cancellations",
+        "committed_truncated"}`. A revoked or expired grant comes back unchanged. Committed work finishes."""
+        return self.request("POST", f"/v1/agents/{agent_id}/grants/{grant_id}/revoke")
+
+    def revoke_all_grants(self, agent_id: str) -> dict[str, Any]:
+        """Revokes every live grant, as `revoke_grant`: `{"data": [grants this call revoked], "committed_*": ...}`."""
+        return self.request("POST", f"/v1/agents/{agent_id}/grants/revoke")
+
     def get_history(
         self, agent_id: str, limit: int = 25, cursor: str | None = None, include_unpaid: bool | None = None
     ) -> dict[str, Any]:

@@ -54,7 +54,7 @@ Advisory only; the API never refuses a request because of it.
 
 | Method & path | Auth | Body | Returns |
 |---|---|---|---|
-| `POST /v1/generate-intent` → 201 | key (+ optional idem) | `{ type, agent_id?, …type fields }`; `agent_create` takes an optional `grant: { label, credential, expires_at }` ([grants.md](grants.md#the-first-grant-with-the-agent)) | `GenerateIntentResponse` (a passkey preview carries `preview.wallet_request`, an `agent_create` with a grant `preview.grant`) |
+| `POST /v1/generate-intent` → 201 | key (+ optional idem) | `{ type, agent_id?, …type fields }`; `agent_create` takes an optional `grant: { label, credential, expires_at }` ([grants.md](grants.md#the-first-grant-with-the-agent)) | `GenerateIntentResponse` (every passkey preview carries one preimage, `preview.wallet_request` or `preview.offchain_message`; an `agent_create` with a grant `preview.grant`; a `payout_authorize` `preview.payout`) |
 | `POST /v1/submit-intent` → 202 | key | `{ type, correlation_id, signed_data }` | `StatusResponse` |
 
 Details: [owner-intents.md](owner-intents.md), signing: [signing.md](signing.md).
@@ -100,6 +100,8 @@ a receipt with the SDK ([status-and-recovery.md](status-and-recovery.md#receipts
 | `GET /v1/agents/{agent_id}/policy` | | `PolicyView` |
 | `GET /v1/agents/{agent_id}/policy/history` | `cursor` (int), `limit` | page of policy revisions |
 | `GET /v1/agents/{agent_id}/grants` | | `{ data: GrantView[] }` (revoked included) |
+| `POST /v1/agents/{agent_id}/grants/{grant_id}/revoke` | key only, no body, no owner signature | `{ grant: GrantView, committed_correlation_ids, committed_cancellations, committed_truncated }`; `revoked_reason` `partner_revoked`; a revoked or expired grant is returned unchanged. See [grants.md](grants.md#revoke) |
+| `POST /v1/agents/{agent_id}/grants/revoke` | key only, no body | `{ data: GrantView[] (the grants this call revoked), committed_correlation_ids, committed_cancellations, committed_truncated }`; empty `data` when none was live |
 | `POST /v1/agents/{agent_id}/grants/token` | key; `grant_type`, `subject_token`, `subject_token_type`, `grant_id?` | `{ access_token: "ngs_…", issued_token_type, token_type: "N_A", expires_in, expires_at, grant_id, label }`. See [Workload identity](#workload-identity-exchange-and-proofs) |
 | `GET /v1/agents/{agent_id}/executions/scheduled` | `cursor`, `limit` | `{ data: [{ correlation_id, execute_after, state, action }], next_cursor }` |
 | `GET /v1/agents/{agent_id}/approvals` | | `{ data: ApprovalView[], truncated }` (at most 100; `truncated` only when the provider holds approvals the API did not create; 503 `provider_unavailable` if it cannot finish in 20 s) |
@@ -144,11 +146,11 @@ are described in [executions.md](executions.md#reference-note-and-receipts).
 | `near/call` → 202, idem | `near.call` lists `receiver_id` | `receiver_id`, `method_name`, `args?` \| `args_base64?`, `gas?`, `deposit?` | `StatusResponse` |
 | `evm/sign-typed-data` → 200 | domain (and `primaryType`, if the entry lists `primary_types`) in `evm.sign_typed_data` | `chain`, `typed_data` (EIP-712 v4; `message` ≤ 65536 bytes as canonical JSON) | `NativeSignature` |
 | `evm/sign-message` → 200 | `evm.sign_message` | `chain`, `message`, `encoding?` | `NativeSignature` |
-| `evm/sign-intent` → 200 | `evm.sign_intent` | `payload` (string: exact canonical JSON text of a NEAR Intents payload, `transfer` intents only), `one_click_quotes?` (up to 2 of 1Click's `POST /v0/quote` answers, unchanged, one per 1Click deposit address the payload pays) | `NativeSignature` + `signed_data` |
+| `evm/sign-intent` → 200 | `evm.sign_intent` | `payload` (string: exact canonical JSON text of a NEAR Intents payload, `transfer` intents only), `one_click_quotes?` (up to 2 of 1Click's `POST /v0/quote` answers, unchanged, one per 1Click deposit address the payload pays), `payout_authorization_id?` (the `correlation_id` of a signed `payout_authorize` intent: [sign-intent.md](sign-intent.md#paying-one-deposit-the-owner-signed)) | `NativeSignature` + `signed_data` |
 | `evm/sign-transaction` → 200 | `evm.sign_transaction` | `chain`, `unsigned_tx` (`0x` serialized unsigned EIP-2718 or EIP-155 transaction for `chain`) | `NativeSignature` |
 | `solana/sign-in` → 200 | `solana.sign_in` lists `domain` | `domain`, `nonce`, `issued_at`, `expiration_time`, `statement?`, `uri?`, `version?`, `chain_id?` | `NativeSignature` + `signed_message` |
 | `solana/sign-message` → 200 | `solana.sign_message` | `message`, `encoding?` (`utf8`/`hex`/`base64`) | `NativeSignature` |
-| `solana/sign-intent` → 200 | `solana.sign_intent` | `payload`, `one_click_quotes?`, as `evm/sign-intent` | `NativeSignature` + `signed_data` |
+| `solana/sign-intent` → 200 | `solana.sign_intent` | `payload`, `one_click_quotes?`, `payout_authorization_id?`, as `evm/sign-intent` | `NativeSignature` + `signed_data` |
 | `solana/sign-transfer` → 200 | `solana.sign_transfer`; `destinations` allows `recipient` | `unsigned_tx` (base64 legacy or v0 message making one SOL/SPL transfer), `recipient` | `NativeSignature` |
 | `solana/sign-transaction` → 200 | `solana.sign_transaction` | `unsigned_tx` (base64 legacy or v0 transaction message) | `NativeSignature` |
 
@@ -272,7 +274,7 @@ StatusResponse = {
   agent_id: string | null,
   type: "agent_create" | "policy_update" | "agent_freeze" | "agent_unfreeze" | "agent_archive"
       | "agent_restore" | "agent_delete" | "grant_issue" | "grant_revoke" | "execution_cancel"
-      | "approval_vote" | "swap" | "limit_order" | "withdraw" | "transfer" | "shield" | "unshield" | "deposit"
+      | "payout_authorize" | "approval_vote" | "swap" | "limit_order" | "withdraw" | "transfer" | "shield" | "unshield" | "deposit"
       | "native",
   status: "PENDING_SIGNATURE" | "QUEUED" | "PENDING_APPROVAL" | "PENDING_DEPOSIT" | "PROCESSING"
         | "SUCCESS" | "REFUNDED" | "FAILED" | "UNCERTAIN" | "NEEDS_REVIEW",
@@ -298,6 +300,7 @@ reads `PROCESSING`, with `details.provider_status` keeping the provider's own st
 | `grant_revoke` | `grant_id`, `committed_correlation_ids`, `committed_cancellations` (`[{ order_id \| null, committed_at }]`, limit-order cancels that may still reach the provider), `committed_truncated` |
 | `execution_cancel` | `cancelled_correlation_id` |
 | `agent_archive`, `agent_restore` | `archived` |
+| `payout_authorize` | `valid_until`, `signed_correlation_id`, `message`, `proof`. `PROCESSING` while signed and unused; `SUCCESS` once a `sign-intent` signature spent it (`signed_correlation_id` is that signature's id); `FAILED` with `payout_authorization_expired`, `payout_authorization_voided` or `payout_authorization_refused` |
 | `approval_vote` | `approval_id`, `verdict`, `repeat_required` (`true`: the reject was recorded but the request is still pending, so generate and sign another reject for the same approval; `null`: not known yet; `false`: nothing more to do), `confirmation?` (`"cancellation_observed"`: a fresh reject lost its reply and the API observed the earlier reject take effect) |
 | `native` | `method`, `chain`, `account_id`, `target`, `amount`, `method_name`, `primary_type`, `domain`, `message_json`, `request_sha256`, `signature` (always `null` here), `tx_hash`, `provider_request_id`, `provider_status`, `failure_reason`. `domain` (the matched EIP-712 domain, in the policy's spelling) and `message_json` (the signed `message` as canonical JSON, keys sorted, a string) are set for typed data, `null` otherwise |
 
@@ -333,7 +336,8 @@ BalanceEntry = { asset_id, symbol, decimals, blockchain, price, …, balance_raw
 // of computing it. Deletion previews keep the old shape, without `available`.
 
 GrantView = { grant_id, agent_id, wallet_id, label, issued_at, expires_at,
-              revoked_at, revoked_reason, owner_epoch,
+              revoked_at, revoked_reason,    // "owner_revoked" (grant_revoke) | "partner_revoked" (API key) | null
+              owner_epoch,
               credential_type: "token" | "oidc" | "public_key",
               owner_message,      // owner_message.credential: a token's SHA-256 hex, or the signed oidc / public_key object
               issued_via }        // { type: "grant_issue" }: signed on its own

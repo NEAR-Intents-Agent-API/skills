@@ -9,8 +9,8 @@ use the money routes.
 
 | Route (`POST /v1/agents/{agent_id}/native/…`) | Switch | SDK | Body |
 |---|---|---|---|
-| `evm/sign-intent` | `evm.sign_intent` | `nativeEvmSignIntent` | `{ payload, one_click_quotes? }` |
-| `solana/sign-intent` | `solana.sign_intent` | `nativeSolanaSignIntent` | `{ payload, one_click_quotes? }` |
+| `evm/sign-intent` | `evm.sign_intent` | `nativeEvmSignIntent` | `{ payload, one_click_quotes?, payout_authorization_id? }` |
+| `solana/sign-intent` | `solana.sign_intent` | `nativeSolanaSignIntent` | `{ payload, one_click_quotes?, payout_authorization_id? }` |
 | `solana/sign-in` | `solana.sign_in` lists the domain | `nativeSolanaSignIn` | `{ domain, nonce, issued_at, expiration_time, statement?, uri?, version?, chain_id? }` |
 | `solana/sign-transfer` | `solana.sign_transfer` | `nativeSolanaSignTransfer` | `{ unsigned_tx, recipient }` |
 
@@ -99,10 +99,62 @@ exists, and a listed receiver is paid whatever the payload says, from that key's
    (Hyperliquid, Polygon, Solana, Base, …) from this key. The loss bound is `max_slippage_bps` on the
    quote's fees and slippage, not an amount rule.
 
+## Paying one deposit the owner signed
+
+`receivers` and `withdrawals` are standing lists. For a one-off 1Click payout they do not allow, the
+owner signs that payout instead of a policy change (`sign_intent` must still be on; an authorization
+does not open the route):
+
+1. `POST /v1/generate-intent` with `{ type: "payout_authorize", agent_id, key: "evm" | "solana",
+   payout: { origin_asset, amount_in, destination_asset, min_amount_out, recipient, recipient_type },
+   valid_until }`. `recipient_type` is `DESTINATION_CHAIN`, `INTENTS` or `CONFIDENTIAL_INTENTS`
+   (`INTENTS` is paid only by a payload for `intents.near`, `CONFIDENTIAL_INTENTS` only by one for
+   `intents.far`). `amount_in` is a **ceiling** and `min_amount_out` a **floor**, so an exact-output
+   quote fits; `valid_until` is 5 minutes to 24 hours ahead. For `DESTINATION_CHAIN` the API reads the
+   chain from 1Click's token listing and writes it, with the address in canonical spelling, into the
+   signed message: show the owner `preview.payout`. An unlisted asset or a bad address is
+   `validation_failed` (400).
+2. The owner signs and you submit it (the usual loop, [owner-intents.md](owner-intents.md)). It stays
+   `PROCESSING` until used. Submitting is refused while the account is frozen (`wallet_frozen`) or
+   that key's `sign_intent` is off (`native_method_denied`).
+3. Send its `correlation_id` as `payout_authorization_id` with the `sign-intent` request, together
+   with the live quote in `one_click_quotes`. One deposit in the payload must match the signed
+   terms: same `originAsset`, `destinationAsset` and `recipientType`; the same `recipient` (on another
+   chain, on the signed chain, in canonical spelling); `amountIn` at most `amount_in`; `minAmountOut`
+   at least `min_amount_out`. That deposit skips `receivers`, `withdrawals` and
+   `one_click_deposits`; every other check stays (1Click's quote signature, refund to the
+   `signer_id`, deposit type, `max_slippage_bps`, the exact payment), and other deposits in the
+   payload are judged as before. No deposit matches: `policy_destination_denied` at
+   `/payout_authorization_id`.
+
+```ts
+const authorization = await api.generateIntent({
+  type: "payout_authorize", agent_id: agentId, key: "evm",
+  payout: { origin_asset, amount_in, destination_asset, min_amount_out, recipient, recipient_type: "DESTINATION_CHAIN" },
+  valid_until: new Date(Date.now() + 3_600_000).toISOString(),
+});
+// owner signs authorization.intent, backend submits, then:
+await agent.nativeEvmSignIntent(agentId, { payload, one_click_quotes: [quote],
+  payout_authorization_id: authorization.correlation_id });
+```
+
+Before the provider is asked to sign, the authorization is bound to that exact payload and grant. The
+identical request may be resent until `valid_until` (it recovers a lost response; NEAR Intents runs
+the payload once by its nonce), but no other payload is paid: a new payout needs a new authorization.
+The payload's `deadline` must be no later than `valid_until` (`intents_deadline_invalid`). Read the
+authorization's status for its state: `PROCESSING` until used, then `SUCCESS` with
+`details.signed_correlation_id`; `FAILED` with `payout_authorization_expired` if `valid_until` passed
+unused, `payout_authorization_voided` if a policy that froze the account or switched that key's
+`sign_intent` off was applied first (a later unfreeze does not revive it), or
+`payout_authorization_refused` if the provider refused the payload it was bound to. `details.message`
+and `details.proof` are the owner's signed consent. The EVM and Solana keys only; the agent's own
+Intents account policy is untouched.
+
 ## Refusals
 
 | Code | Status | Meaning and move |
 |---|---|---|
+| `payout_authorization_invalid` | 409 | `payout_authorization_id` (`source.pointer` `/payout_authorization_id`, reason in `detail`): unknown or another agent's, not yet signed, already used for another payload or grant, expired, for the other key, or signed by a previous owner → generate and sign a new authorization |
 | `native_method_denied` | 403 | `sign_intent` is off for this key → owner `policy_update` |
 | `policy_destination_denied` | 403 | a receiver is not allowed, or the quote check failed. **Read `detail`**: an unlisted receiver or withdrawal address → owner adds it; a deposit address paid without its quote, an unsigned, tampered or dry quote, a wrong amount, a refund elsewhere or too much loss → get a fresh live quote and rebuild, nothing for the owner to change (unless the slippage cap is too low for the route) |
 | `validation_failed` | 400 | a quote in `one_click_quotes` is for an address the payload does not pay, or repeats one; `source.pointer` is `/one_click_quotes/{i}/quote/depositAddress` → send one quote per paid deposit address |
@@ -125,6 +177,9 @@ exists, and a listed receiver is paid whatever the payload says, from that key's
   the key, a listed receiver or a listed address. In `withdrawals`, list only the owner's own
   addresses. `max_slippage_bps` on the quote's fees and slippage is the only bound. A deposit that
   1Click has since closed is not detected; a late payment refunds to the signer.
+- A `payout_authorize` signature lets the key pay exactly one payout, up to its ceiling and floor,
+  to its recipient, with no policy change; show `preview.payout` (the chain and address as the API
+  will enforce them) and the `valid_until`, and keep it short.
 - **Freeze caveat, say it plainly:** a freeze refuses new payloads but cannot recall one that was
   already signed. A payload signed before the freeze stays publishable by anyone who holds it until
   its own deadline: up to 5 minutes, or up to 96 hours for a deposit payload. Where you describe

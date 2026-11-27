@@ -37,6 +37,11 @@ Every error is a JSON:API document:
   spend, in atomic units (the balances route's `available_raw`). Send at most that, or fund. On
   `custody_native_balance_required` it is what the agent's own NEAR account holds, in yoctoNEAR; a
   failed operation keeps it as `details.available_amount`.
+- `meta.quoted_min_amount_out` / `meta.quoted_amount_in` (SDK 0.9.8: `error.quotedMinAmountOut` /
+  `error.quotedAmountIn`) → on `below_min_amount_out` / `above_max_amount_in`, when the provider
+  states it: the fresh quote's guaranteed output / needed input, in atomic units. A gap of a few
+  units from your figure is drift; a large one is a real move. A failed operation keeps it as
+  `details.quoted_min_amount_out` / `details.quoted_amount_in`.
 - Unknown code → fall back to its `layer` and the HTTP status class. Always log `meta.request_id`.
 
 ## Layers
@@ -100,8 +105,8 @@ Every error is a JSON:API document:
 | **Execution / routing** | | | |
 | `public_balance_exit_only` | `request` | 400 | `confidential: false` on swap, limit order, transfer or deposit address, or any unshield, live or `dry`; nothing submitted, **never retry**. Omit `confidential` (the confidential balance is the account). Leftover public funds: `shield` them, or `withdraw` with `confidential: false` (the only request that accepts it). A missing or invalid grant is reported first |
 | `insufficient_balance` | `balance` | 400/409 | the balance the request spends from (confidential, or the legacy public one for a shield or a `confidential: false` withdrawal) holds less than it spends; nothing submitted or charged. `meta.available_amount` is what it can still spend → fund the account or send at most that. The API's own check is 400 with no history row; a provider refusal is 409 |
-| `below_min_amount_out` | `request` | 409 | `min_amount_out` is above the guaranteed output (`quote.min_amount_out`, not the estimate `quote.amount_out`) of a fresh quote for a swap or withdrawal; nothing signed or sent, not retryable → lower the floor (or accept the quote), then a **new** key. A dry run whose quote already misses it warns with this code |
-| `above_max_amount_in` | `request` | 409 | exact output: `max_amount_in` is below a fresh quote's `amount_in`; nothing signed or sent, not retryable → raise the ceiling (0.5 to 1% above a quote's `amount_in`), or ask for less, then a **new** key. A dry run whose quote already misses it warns with this code |
+| `below_min_amount_out` | `request` | 409 | `min_amount_out` is above the guaranteed output (`quote.min_amount_out`, not the estimate `quote.amount_out`) of a fresh quote for a swap or withdrawal; nothing signed or sent, not retryable → `meta.quoted_min_amount_out` is the fresh figure when present; lower the floor (0.5 to 1% below a quote's `min_amount_out`, more for a timelocked or approval-held request), then a **new** key. A dry run whose quote already misses it warns with this code |
+| `above_max_amount_in` | `request` | 409 | exact output: `max_amount_in` is below a fresh quote's `amount_in`; nothing signed or sent, not retryable → `meta.quoted_amount_in` is the fresh figure when present; raise the ceiling (0.5 to 1% above a quote's `amount_in`), or ask for less, then a **new** key. A dry run whose quote already misses it warns with this code |
 | `amount_too_low` | `request` | 400/409 | below the minimum → quote at least `meta.min_amount` (atomic units of the asset sent) when present, else a larger amount. 400: the API's own check (a limit order worth under 0.1 USD, `source.pointer` `/quantity`; a deposit quote); 409: the provider's route minimum |
 | `request_no_longer_accepted` | `request` | status `FAILED`, `failure_code` | a timelocked (`QUEUED`) request queued in a shape the API no longer accepts, such as a withdrawal with a `memo`; it never reached the provider and nothing is charged → send it again in the current shape under a **new** key |
 | `limit_order_not_found` | `request` | 404 | `GET`/cancel of an order id that is not this agent's → read `GET …/limit-orders` for the ids |

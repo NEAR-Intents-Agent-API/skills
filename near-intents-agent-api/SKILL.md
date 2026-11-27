@@ -34,6 +34,9 @@ Follow these in every integration; most bugs and lost-fund incidents come from b
    hash or reorder it; submit `{...intent, <wallet output fields>}`.
 3. **Amounts are atomic integer strings** (`"1000000"` = 1 USDC at 6 decimals). Get `decimals`
    and `asset_id` from `GET /v1/tokens`. Never use floats. Amounts that move funds must be > 0.
+   Ondo tokenized stocks (`bsc` tokens such as `TSLAon`) and Earn vault tokens (such as `TLO`) are
+   ordinary asset ids on the confidential balance; each has a minimum swap size (`route_unavailable`
+   below it).
 4. **Every money-moving call carries an `Idempotency-Key`** (8–128 chars `[A-Za-z0-9._:-]`).
    Create it, persist it with the request, *then* send. Retry only with the same key and body.
    A live `placeLimitOrder` carries one; cancelling an order needs the grant only. If the response is

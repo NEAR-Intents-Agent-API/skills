@@ -55,8 +55,13 @@ POST …/withdraw  { "asset": "<usdc>", "chain": "base", "recipient": "0xabc…"
   anything is signed or sent. A `min_amount_out` above the quote's guaranteed output
   (`quote.min_amount_out`, not the estimate `quote.amount_out`) is refused `below_min_amount_out`; a
   `max_amount_in` below the quote's `amount_in` is refused `above_max_amount_in`. Both are 409, send
-  nothing and are not retryable: change the figure and use a new key. A dry run's quote is an
-  earlier one, so leave 0.5 to 1% room between it and the floor or ceiling you send.
+  nothing and are not retryable: change the figure and use a new key. The refusal states the fresh
+  quote's figure, `meta.quoted_min_amount_out` or `meta.quoted_amount_in`, when the provider gives
+  one: a gap of a few units is drift, a large one a real price move. A dry run's quote is an
+  earlier one, so leave 0.5 to 1% room between it and the floor or ceiling you send, and more for
+  a request a timelock or owner approval holds: it is quoted when it releases and fails for good
+  on a miss. Without `min_amount_out` the floor is the fresh quote's own `min_amount_out`, set by
+  the provider's slippage tolerance.
 - At settlement an exact-output request completes only on a reported delivery of at least
   `amount_out`; less stops as `NEEDS_REVIEW` with `amount_out_below_minimum`.
 

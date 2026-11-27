@@ -129,7 +129,10 @@ a receipt with the SDK ([status-and-recovery.md](status-and-recovery.md#receipts
 Swap and withdraw take exact input (`amount`, optionally `min_amount_out`) or exact output
 (`amount_out` with `max_amount_in`), never both; see [executions.md](executions.md#exact-input-or-exact-output).
 Amounts are digits only, with no sign or leading zeros. A fresh quote that misses `min_amount_out` or
-`max_amount_in` refuses with `below_min_amount_out` or `above_max_amount_in` (409, nothing sent).
+`max_amount_in` refuses with `below_min_amount_out` or `above_max_amount_in` (409, nothing sent),
+stating the fresh figure in `meta.quoted_min_amount_out` or `meta.quoted_amount_in` when the
+provider gives one. Leave 0.5 to 1% room from a dry run's quote, more for a timelocked or
+approval-held request.
 
 `confidential` defaults to `true` everywhere. `confidential: false` is refused with
 `public_balance_exit_only` (400, layer `request`, not retryable, live and `dry`) on `/swap`,
